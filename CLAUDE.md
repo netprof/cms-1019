@@ -66,4 +66,5 @@ Karma + Jasmine (`ng test`). When mocking `ActivatedRoute` in specs, list its pr
 ## Gotchas
 
 - Source files contain Chinese UI text and must stay UTF-8. In Windows PowerShell 5.1, `Get-Content`/`Set-Content` without `-Encoding utf8` corrupts them — use the Edit/Write tools instead.
-- Repo is not under git.
+- Git: `main` is the stable branch; day-to-day work goes on `develop`. Files use LF; Git warns about CRLF conversion on Windows, which is harmless.
+- A running `dotnet run` dev server locks `bin\Debug`, so `dotnet test` fails with a file-lock error. Stop the server first, or run `dotnet test CMS.slnx -c Release`.
