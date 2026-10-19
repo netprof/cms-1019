@@ -29,5 +29,38 @@ export const routes: Routes = [
       },
     ],
   },
+  {
+    path: 'publish-statuses',
+    children: [
+      {
+        path: '',
+        loadComponent: () =>
+          import('./features/publish-statuses/publish-status-list/publish-status-list').then(
+            (m) => m.PublishStatusList,
+          ),
+      },
+      {
+        path: 'new',
+        loadComponent: () =>
+          import('./features/publish-statuses/publish-status-form/publish-status-form').then(
+            (m) => m.PublishStatusForm,
+          ),
+      },
+      {
+        path: ':id/edit',
+        loadComponent: () =>
+          import('./features/publish-statuses/publish-status-form/publish-status-form').then(
+            (m) => m.PublishStatusForm,
+          ),
+      },
+      {
+        path: ':id',
+        loadComponent: () =>
+          import('./features/publish-statuses/publish-status-detail/publish-status-detail').then(
+            (m) => m.PublishStatusDetail,
+          ),
+      },
+    ],
+  },
   { path: '**', redirectTo: 'app-roles' },
 ];

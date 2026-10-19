@@ -26,6 +26,16 @@ describe('App', () => {
     expect(link.getAttribute('href')).toBe('/app-roles');
   });
 
+  it('should show the PublishStatus entry under 系統管理 Admin', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const links = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('a.nav-item'));
+    const link = links.find((a) => a.textContent?.includes('發布狀態 PublishStatus')) as HTMLAnchorElement;
+
+    expect(link).toBeDefined();
+    expect(link.getAttribute('href')).toBe('/publish-statuses');
+  });
+
   it('should collapse and expand a nav group', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();

@@ -61,6 +61,7 @@ Karma + Jasmine (`ng test`). When mocking `ActivatedRoute` in specs, list its pr
 ## Features
 
 - **AppRole** (`auth.sql`): list/filter, view, add, edit, delete, with user assignment (n-n via `AppUserRole`). Menu: `系統管理 Admin → 角色 AppRole`.
+- **PublishStatus** (`admin.sql`): list/filter, view, add, edit, delete. `pkid` is a user-supplied `tinyint` (not IDENTITY) — `POST` returns 409 on a duplicate and the field is locked in edit mode. `DELETE` maps SQL FK violation 547 to 409 (referenced by `Course`/`Promotion2`). Lookup at `/api/lookups/publishstatuses`. Spec: `spec/admin/PublishStatus.md`. Menu: `系統管理 Admin → 發布狀態 PublishStatus`.
 
 ## Gotchas
 
