@@ -61,8 +61,11 @@ Karma + Jasmine (`ng test`). When mocking `ActivatedRoute` in specs, list its pr
 ## Features
 
 - **AppRole** (`auth.sql`): list/filter, view, add, edit, delete, with user assignment (n-n via `AppUserRole`). Menu: `系統管理 Admin → 角色 AppRole`.
+- **PublishStatus** (`admin.sql`) — implemented on the `develop` branch (commit `9d0c206`), not yet merged to `main`: list/filter, view, add, edit, delete. `pkid` is a user-supplied `tinyint` (not IDENTITY) — `POST` returns 409 on a duplicate and the field is locked in edit mode. `DELETE` maps SQL FK violation 547 to 409 (referenced by `Course`/`Promotion2`). Lookup at `/api/lookups/publishstatuses`. Spec: `spec/admin/PublishStatus.md`. Menu: `系統管理 Admin → 發布狀態 PublishStatus`. Verified 2026-10-19: 32 backend + 60 frontend tests pass on `develop`.
 
 ## Gotchas
 
 - Source files contain Chinese UI text and must stay UTF-8. In Windows PowerShell 5.1, `Get-Content`/`Set-Content` without `-Encoding utf8` corrupts them — use the Edit/Write tools instead.
-- Repo is not under git.
+- Git: `main` is the stable branch; day-to-day work goes on `develop`. Files use LF; Git warns about CRLF conversion on Windows, which is harmless.
+- A running `dotnet run` dev server locks `bin\Debug`, so `dotnet test` fails with a file-lock error. Stop the server first, or run `dotnet test CMS.slnx -c Release`.
+- `/crud` skips spec generation when `spec/{SUB_SYSTEM}/{TABLE}.md` exists, and should not rebuild a feature that is already committed — check the branch first.
