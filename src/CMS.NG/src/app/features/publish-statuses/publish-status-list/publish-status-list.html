@@ -39,7 +39,7 @@
         <th pSortableColumn="isDraft" style="width: 7rem; text-align: center">草稿 <p-sortIcon field="isDraft" /></th>
         <th pSortableColumn="isPublished" style="width: 7rem; text-align: center">已發布 <p-sortIcon field="isPublished" /></th>
         <th pSortableColumn="isDiscontinued" style="width: 7rem; text-align: center">已停用 <p-sortIcon field="isDiscontinued" /></th>
-        <th style="width: 9rem; text-align: center">操作</th>
+        <th style="width: 12rem; text-align: center">操作</th>
       </tr>
     </ng-template>
     <ng-template #body let-s>
@@ -56,6 +56,7 @@
           <p-tag [value]="s.isDiscontinued ? '是' : '否'" [severity]="s.isDiscontinued ? 'success' : 'secondary'" />
         </td>
         <td style="text-align: center">
+          <p-button icon="pi pi-book" [text]="true" severity="info" ariaLabel="查看課程" (onClick)="viewCourses(s)" />
           <p-button icon="pi pi-eye" [text]="true" severity="secondary" ariaLabel="檢視" (onClick)="view(s)" />
           <p-button icon="pi pi-pencil" [text]="true" ariaLabel="編輯" (onClick)="edit(s)" />
           <p-button icon="pi pi-trash" [text]="true" severity="danger" ariaLabel="刪除" (onClick)="remove(s)" />

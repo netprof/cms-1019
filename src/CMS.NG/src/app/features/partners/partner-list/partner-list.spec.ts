@@ -117,6 +117,14 @@ describe('PartnerList', () => {
     ]);
   });
 
+  it('viewCourses() opens the course list filtered by this partner', () => {
+    const navigate = spyOn(TestBed.inject(Router), 'navigate');
+
+    component.viewCourses(partners[0]);
+
+    expect(navigate).toHaveBeenCalledWith(['/courses'], { queryParams: { partnerPkid: 2 } });
+  });
+
   it('remove() asks for confirmation with the pkid and name', () => {
     const confirm = spyOn(confirmation, 'confirm');
 

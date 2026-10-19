@@ -49,6 +49,26 @@ describe('App', () => {
     expect(link.getAttribute('href')).toBe('/partners');
   });
 
+  it('should show the CourseGroup entry under 課程管理 Course', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const links = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('a.nav-item'));
+    const link = links.find((a) => a.textContent?.includes('課程群組 CourseGroup')) as HTMLAnchorElement;
+
+    expect(link).toBeDefined();
+    expect(link.getAttribute('href')).toBe('/course-groups');
+  });
+
+  it('should show the Course entry under 課程管理 Course', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const links = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('a.nav-item'));
+    const link = links.find((a) => a.textContent?.includes('課程 Course')) as HTMLAnchorElement;
+
+    expect(link).toBeDefined();
+    expect(link.getAttribute('href')).toBe('/courses');
+  });
+
   it('should collapse and expand a nav group', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();

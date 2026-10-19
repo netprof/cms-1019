@@ -48,6 +48,11 @@ export class PublishStatusDetail implements OnInit {
     this.router.navigate(['/publish-statuses', this.status()!.pkid, 'edit']);
   }
 
+  /** Primary-Foreign link: courses with this publish status. */
+  viewCourses() {
+    this.router.navigate(['/courses'], { queryParams: { publishStatusPkid: this.status()!.pkid } });
+  }
+
   back() {
     this.router.navigate(['/publish-statuses']);
   }

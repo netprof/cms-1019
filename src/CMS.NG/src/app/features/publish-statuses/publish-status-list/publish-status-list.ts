@@ -138,6 +138,11 @@ export class PublishStatusList implements OnInit {
     this.router.navigate(['/publish-statuses', status.pkid, 'edit']);
   }
 
+  /** Primary-Foreign link: courses with this publish status. */
+  viewCourses(status: PublishStatus) {
+    this.router.navigate(['/courses'], { queryParams: { publishStatusPkid: status.pkid } });
+  }
+
   remove(status: PublishStatus) {
     this.confirmation.confirm({
       header: '刪除發布狀態',

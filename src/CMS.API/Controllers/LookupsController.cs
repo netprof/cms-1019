@@ -9,7 +9,9 @@ namespace CMS.API.Controllers;
 public class LookupsController(
     IAppRoleRepository appRoles,
     IPublishStatusRepository publishStatuses,
-    IPartnerRepository partners) : ControllerBase
+    IPartnerRepository partners,
+    ICourseGroupRepository courseGroups,
+    ICourseRepository courses) : ControllerBase
 {
     [HttpGet("appusers")]
     public async Task<ActionResult<IEnumerable<AppUserLookup>>> GetAppUsers() =>
@@ -22,4 +24,16 @@ public class LookupsController(
     [HttpGet("partners")]
     public async Task<ActionResult<IEnumerable<PartnerLookup>>> GetPartners() =>
         Ok(await partners.GetLookupsAsync());
+
+    [HttpGet("coursegroups")]
+    public async Task<ActionResult<IEnumerable<CourseGroupLookup>>> GetCourseGroups() =>
+        Ok(await courseGroups.GetLookupsAsync());
+
+    [HttpGet("certifications")]
+    public async Task<ActionResult<IEnumerable<CertificationLookup>>> GetCertifications() =>
+        Ok(await courses.GetCertificationLookupsAsync());
+
+    [HttpGet("jobcategories")]
+    public async Task<ActionResult<IEnumerable<JobCategoryLookup>>> GetJobCategories() =>
+        Ok(await courses.GetJobCategoryLookupsAsync());
 }

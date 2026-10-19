@@ -69,4 +69,15 @@ describe('PartnerDetail', () => {
 
     expect(navigate.calls.allArgs()).toEqual([[['/partners', 2, 'edit']], [['/partners']]]);
   });
+
+  it('viewCourses() opens the course list filtered by this partner', () => {
+    const fixture = TestBed.createComponent(PartnerDetail);
+    fixture.detectChanges();
+    const navigate = spyOn(TestBed.inject(Router), 'navigate');
+
+    fixture.componentInstance.viewCourses();
+
+    expect(navigate).toHaveBeenCalledWith(['/courses'], { queryParams: { partnerPkid: 2 } });
+    expect((fixture.nativeElement as HTMLElement).querySelector('#courses-button')).not.toBeNull();
+  });
 });

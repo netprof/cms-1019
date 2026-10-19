@@ -127,6 +127,11 @@ export class PartnerList implements OnInit {
     this.router.navigate(['/partners', partner.pkid, 'edit']);
   }
 
+  /** Primary-Foreign link: courses of this partner. */
+  viewCourses(partner: Partner) {
+    this.router.navigate(['/courses'], { queryParams: { partnerPkid: partner.pkid } });
+  }
+
   remove(partner: Partner) {
     this.confirmation.confirm({
       header: '刪除合作廠商',

@@ -47,6 +47,11 @@ export class PartnerDetail implements OnInit {
     this.router.navigate(['/partners', this.partner()!.pkid, 'edit']);
   }
 
+  /** Primary-Foreign link: courses of this partner. */
+  viewCourses() {
+    this.router.navigate(['/courses'], { queryParams: { partnerPkid: this.partner()!.pkid } });
+  }
+
   back() {
     this.router.navigate(['/partners']);
   }

@@ -41,7 +41,7 @@
         <th pSortableColumn="nameOnCourseDetailPage">課程頁顯示名稱 <p-sortIcon field="nameOnCourseDetailPage" /></th>
         <th pSortableColumn="displayOrder" style="width: 7rem; text-align: right">顯示順序 <p-sortIcon field="displayOrder" /></th>
         <th pSortableColumn="imageFilename" style="width: 11rem">圖片檔名 <p-sortIcon field="imageFilename" /></th>
-        <th style="width: 9rem; text-align: center">操作</th>
+        <th style="width: 12rem; text-align: center">操作</th>
       </tr>
     </ng-template>
     <ng-template #body let-p>
@@ -54,6 +54,7 @@
         <td style="text-align: right">{{ p.displayOrder }}</td>
         <td>{{ p.imageFilename || '—' }}</td>
         <td style="text-align: center">
+          <p-button icon="pi pi-book" [text]="true" severity="info" ariaLabel="查看課程" (onClick)="viewCourses(p)" />
           <p-button icon="pi pi-eye" [text]="true" severity="secondary" ariaLabel="檢視" (onClick)="view(p)" />
           <p-button icon="pi pi-pencil" [text]="true" ariaLabel="編輯" (onClick)="edit(p)" />
           <p-button icon="pi pi-trash" [text]="true" severity="danger" ariaLabel="刪除" (onClick)="remove(p)" />

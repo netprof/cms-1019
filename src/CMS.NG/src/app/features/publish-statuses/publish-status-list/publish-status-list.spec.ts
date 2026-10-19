@@ -96,6 +96,14 @@ describe('PublishStatusList', () => {
     expect(restored.filters.keyword).toBe('saved');
   });
 
+  it('viewCourses() opens the course list filtered by this status', () => {
+    const navigate = spyOn(TestBed.inject(Router), 'navigate');
+
+    component.viewCourses(statuses[0]);
+
+    expect(navigate).toHaveBeenCalledWith(['/courses'], { queryParams: { publishStatusPkid: 1 } });
+  });
+
   it('navigates to add / view / edit', () => {
     const navigate = spyOn(TestBed.inject(Router), 'navigate');
 

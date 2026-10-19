@@ -1,0 +1,79 @@
+<p-toast />
+
+<div class="page-header">
+  <h1>檢視課程</h1>
+  <div class="actions">
+    <p-button id="back-button" label="返回" icon="pi pi-arrow-left" severity="secondary" (onClick)="back()" />
+    @if (course()) {
+      <p-button id="edit-button" label="編輯" icon="pi pi-pencil" (onClick)="edit()" />
+    }
+  </div>
+</div>
+
+@if (course(); as c) {
+  <div class="card">
+    <h2>課程資料</h2>
+    <dl>
+      <dt>主代碼</dt><dd>{{ c.pkid }}</dd>
+      <dt>顯示順序</dt><dd>{{ c.displayOrder }}</dd>
+      <dt>簡介代碼</dt><dd>{{ c.courseId }}</dd>
+      <dt>科目代碼</dt><dd>{{ c.prodCourseId }}</dd>
+      <dt>課程名稱</dt><dd>{{ c.title }}</dd>
+      <dt>原廠課程名稱</dt><dd id="official-title">{{ c.officialTitle || '—' }}</dd>
+      <dt>網址別名</dt><dd>{{ c.friendlyUrl }}</dd>
+      <dt>原廠</dt><dd><a id="partner-link" [routerLink]="['/partners', c.partnerPkid]">{{ c.partner.name }}</a></dd>
+      <dt>課程群組</dt>
+      <dd id="course-group">
+        @if (c.courseGroup) {
+          <a [routerLink]="['/course-groups', c.courseGroupPkid]">{{ c.courseGroup.description }}</a>
+        } @else {
+          —
+        }
+      </dd>
+      <dt>上架狀態</dt><dd><a id="publish-status-link" [routerLink]="['/publish-statuses', c.publishStatusPkid]">{{ c.publishStatus.description }}</a></dd>
+      <dt>上架日期</dt><dd>{{ c.scheduleOn | date: 'yyyy/MM/dd' }}</dd>
+      <dt>下架日期</dt><dd>{{ c.scheduleOff | date: 'yyyy/MM/dd' }}</dd>
+      <dt>時數</dt><dd>{{ c.hour }}</dd>
+      <dt>定價</dt><dd>{{ c.listPrice | number: '1.0-0' }}</dd>
+      <dt>點數</dt><dd>{{ c.learningCredit | number: '1.1-1' }}</dd>
+      <dt>允許重聽</dt>
+      <dd><p-tag [value]="c.canRepeat ? '是' : '否'" [severity]="c.canRepeat ? 'success' : 'secondary'" /></dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h2>課程說明</h2>
+    <dl>
+      <dt>教材</dt><dd class="text">{{ c.material || '—' }}</dd>
+      <dt>課程目標</dt><dd class="text">{{ c.objective || '—' }}</dd>
+      <dt>適合對象</dt><dd class="text">{{ c.target || '—' }}</dd>
+      <dt>先備知識</dt><dd class="text">{{ c.prerequisites || '—' }}</dd>
+      <dt>課程大綱</dt><dd class="text">{{ c.outline || '—' }}</dd>
+      <dt>對應認證／考試</dt><dd class="text">{{ c.towardCertOrExam || '—' }}</dd>
+      <dt>備註</dt><dd class="text">{{ c.note || '—' }}</dd>
+      <dt>其他資訊</dt><dd class="text">{{ c.otherInfo || '—' }}</dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h2>對應認證（{{ c.certificationCount }}）</h2>
+    <div class="chips" id="certification-chips">
+      @for (label of certificationLabels(); track label) {
+        <p-tag [value]="label" severity="secondary" />
+      } @empty {
+        <span>沒有對應認證</span>
+      }
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>職務類別（{{ c.jobCategoryCount }}）</h2>
+    <div class="chips" id="job-category-chips">
+      @for (label of jobCategoryLabels(); track label) {
+        <p-tag [value]="label" severity="secondary" />
+      } @empty {
+        <span>沒有職務類別</span>
+      }
+    </div>
+  </div>
+}

@@ -57,4 +57,15 @@ describe('PublishStatusDetail', () => {
 
     expect(navigate.calls.allArgs()).toEqual([[['/publish-statuses', 2, 'edit']], [['/publish-statuses']]]);
   });
+
+  it('viewCourses() opens the course list filtered by this status', () => {
+    const fixture = TestBed.createComponent(PublishStatusDetail);
+    fixture.detectChanges();
+    const navigate = spyOn(TestBed.inject(Router), 'navigate');
+
+    fixture.componentInstance.viewCourses();
+
+    expect(navigate).toHaveBeenCalledWith(['/courses'], { queryParams: { publishStatusPkid: 2 } });
+    expect((fixture.nativeElement as HTMLElement).querySelector('#courses-button')).not.toBeNull();
+  });
 });
