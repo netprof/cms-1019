@@ -1,0 +1,26 @@
+<p-toast />
+
+<div class="page-header">
+  <h1>檢視合作廠商</h1>
+  <div class="actions">
+    <p-button id="back-button" label="返回" icon="pi pi-arrow-left" severity="secondary" (onClick)="back()" />
+    @if (partner()) {
+      <p-button id="edit-button" label="編輯" icon="pi pi-pencil" (onClick)="edit()" />
+    }
+  </div>
+</div>
+
+@if (partner(); as p) {
+  <div class="card">
+    <h2>合作廠商資料</h2>
+    <dl>
+      <dt>主代碼</dt><dd>{{ p.pkid }}</dd>
+      <dt>廠商名稱</dt><dd>{{ p.name }}</dd>
+      <dt>關鍵字</dt><dd>{{ p.appKey }}</dd>
+      <dt>選單顯示名稱</dt><dd>{{ p.nameOnPartnerMenu }}</dd>
+      <dt>課程頁顯示名稱</dt><dd>{{ p.nameOnCourseDetailPage }}</dd>
+      <dt>顯示順序</dt><dd>{{ p.displayOrder }}</dd>
+      <dt>圖片檔名</dt><dd id="image-filename">{{ p.imageFilename || '—' }}</dd>
+    </dl>
+  </div>
+}

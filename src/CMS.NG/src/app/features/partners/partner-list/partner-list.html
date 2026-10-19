@@ -1,0 +1,86 @@
+<p-toast />
+<p-confirmdialog />
+
+<div class="page-header">
+  <h1>合作廠商 Partner <small>提供課程的合作廠商／原廠</small></h1>
+  <div class="actions">
+    <p-button
+      id="filter-button"
+      label="搜尋條件"
+      icon="pi pi-filter"
+      [severity]="hasFilters ? 'primary' : 'secondary'"
+      [outlined]="hasFilters"
+      (onClick)="drawerVisible.set(true)"
+    />
+    <p-button id="add-button" label="新增" icon="pi pi-plus" (onClick)="add()" />
+  </div>
+</div>
+
+<div class="card">
+  <p-table
+    [value]="partners()"
+    [loading]="loading()"
+    [paginator]="true"
+    [rows]="page.rows"
+    [first]="page.first"
+    [rowsPerPageOptions]="[10, 20, 50]"
+    [showCurrentPageReport]="true"
+    currentPageReportTemplate="{first}–{last} 筆，共 {totalRecords} 筆"
+    [sortField]="sort.field"
+    [sortOrder]="sort.order"
+    (onSort)="onSort($event)"
+    (onPage)="onPage($event)"
+    [tableStyle]="{ 'min-width': '64rem' }"
+  >
+    <ng-template #header>
+      <tr>
+        <th pSortableColumn="pkid" style="width: 6rem">主代碼 <p-sortIcon field="pkid" /></th>
+        <th pSortableColumn="name">廠商名稱 <p-sortIcon field="name" /></th>
+        <th pSortableColumn="appKey" style="width: 8rem">關鍵字 <p-sortIcon field="appKey" /></th>
+        <th pSortableColumn="nameOnPartnerMenu">選單顯示名稱 <p-sortIcon field="nameOnPartnerMenu" /></th>
+        <th pSortableColumn="nameOnCourseDetailPage">課程頁顯示名稱 <p-sortIcon field="nameOnCourseDetailPage" /></th>
+        <th pSortableColumn="displayOrder" style="width: 7rem; text-align: right">顯示順序 <p-sortIcon field="displayOrder" /></th>
+        <th pSortableColumn="imageFilename" style="width: 11rem">圖片檔名 <p-sortIcon field="imageFilename" /></th>
+        <th style="width: 9rem; text-align: center">操作</th>
+      </tr>
+    </ng-template>
+    <ng-template #body let-p>
+      <tr>
+        <td>{{ p.pkid }}</td>
+        <td>{{ p.name }}</td>
+        <td>{{ p.appKey }}</td>
+        <td>{{ p.nameOnPartnerMenu }}</td>
+        <td>{{ p.nameOnCourseDetailPage }}</td>
+        <td style="text-align: right">{{ p.displayOrder }}</td>
+        <td>{{ p.imageFilename || '—' }}</td>
+        <td style="text-align: center">
+          <p-button icon="pi pi-eye" [text]="true" severity="secondary" ariaLabel="檢視" (onClick)="view(p)" />
+          <p-button icon="pi pi-pencil" [text]="true" ariaLabel="編輯" (onClick)="edit(p)" />
+          <p-button icon="pi pi-trash" [text]="true" severity="danger" ariaLabel="刪除" (onClick)="remove(p)" />
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template #emptymessage>
+      <tr>
+        <td colspan="8" style="text-align: center">沒有符合的資料</td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>
+
+<p-drawer header="搜尋條件" position="right" [visible]="drawerVisible()" (visibleChange)="drawerVisible.set($event)">
+  <div class="field">
+    <label for="f-keyword">關鍵字</label>
+    <input
+      pInputText
+      id="f-keyword"
+      [(ngModel)]="filters.keyword"
+      placeholder="廠商名稱、關鍵字、顯示名稱"
+      (keyup.enter)="applyFilters()"
+    />
+  </div>
+  <div class="actions" style="display: flex; gap: 0.5rem">
+    <p-button label="搜尋" icon="pi pi-search" (onClick)="applyFilters()" />
+    <p-button label="清除" icon="pi pi-times" severity="secondary" (onClick)="clearFilters()" />
+  </div>
+</p-drawer>

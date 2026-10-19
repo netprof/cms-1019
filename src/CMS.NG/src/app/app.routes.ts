@@ -62,5 +62,30 @@ export const routes: Routes = [
       },
     ],
   },
+  {
+    path: 'partners',
+    children: [
+      {
+        path: '',
+        loadComponent: () =>
+          import('./features/partners/partner-list/partner-list').then((m) => m.PartnerList),
+      },
+      {
+        path: 'new',
+        loadComponent: () =>
+          import('./features/partners/partner-form/partner-form').then((m) => m.PartnerForm),
+      },
+      {
+        path: ':id/edit',
+        loadComponent: () =>
+          import('./features/partners/partner-form/partner-form').then((m) => m.PartnerForm),
+      },
+      {
+        path: ':id',
+        loadComponent: () =>
+          import('./features/partners/partner-detail/partner-detail').then((m) => m.PartnerDetail),
+      },
+    ],
+  },
   { path: '**', redirectTo: 'app-roles' },
 ];

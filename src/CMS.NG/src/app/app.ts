@@ -31,6 +31,11 @@ export class App {
         { label: '發布狀態 PublishStatus', icon: 'pi-flag', route: '/publish-statuses' },
       ],
     },
+    {
+      label: '課程管理 Course',
+      icon: 'pi-book',
+      items: [{ label: '合作廠商 Partner', icon: 'pi-building', route: '/partners' }],
+    },
   ];
 
   readonly openGroups = signal<Set<string>>(new Set(this.navGroups.map((g) => g.label)));

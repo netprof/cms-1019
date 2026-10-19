@@ -62,6 +62,7 @@ Karma + Jasmine (`ng test`). When mocking `ActivatedRoute` in specs, list its pr
 
 - **AppRole** (`auth.sql`): list/filter, view, add, edit, delete, with user assignment (n-n via `AppUserRole`). Menu: `系統管理 Admin → 角色 AppRole`.
 - **PublishStatus** (`admin.sql`): list/filter, view, add, edit, delete. `pkid` is a user-supplied `tinyint` (not IDENTITY) — `POST` returns 409 on a duplicate and the field is locked in edit mode. `DELETE` maps SQL FK violation 547 to 409 (referenced by `Course`/`Promotion2`). Lookup at `/api/lookups/publishstatuses`. Spec: `spec/admin/PublishStatus.md`. Menu: `系統管理 Admin → 發布狀態 PublishStatus`.
+- **Partner** (`course.sql`): list/filter, view, add, edit, delete. `pkid` is `smallint IDENTITY` (C# `short`); the key is shown read-only in edit mode and is not a form control. Blank `ImageFilename` is stored as `NULL`. `DELETE` maps FK violation 547 to 409 (referenced by `Course`/`Certification`/`PartnerCourseGroup`/`Promotion2`). `PartnerCourseGroup` is a child entity, not an n-n multiselect (it has its own identity that `Promotion2` references). Lookup at `/api/lookups/partners`. Spec: `spec/course/Partner.md`. Menu: `課程管理 Course → 合作廠商 Partner`.
 
 ## Gotchas
 
