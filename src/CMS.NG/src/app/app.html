@@ -1,0 +1,32 @@
+<div class="layout" [class.collapsed]="collapsed()">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-text">CMS</span>
+      <button type="button" class="collapse-btn" aria-label="Toggle sidebar" (click)="collapsed.set(!collapsed())">
+        <i class="pi" [class.pi-angle-left]="!collapsed()" [class.pi-angle-right]="collapsed()"></i>
+      </button>
+    </div>
+
+    <nav>
+      @for (group of navGroups; track group.label) {
+        <button type="button" class="nav-group" (click)="toggleGroup(group.label)">
+          <i class="pi {{ group.icon }}"></i>
+          <span class="label">{{ group.label }}</span>
+          <i class="pi chevron" [class.pi-chevron-down]="openGroups().has(group.label)" [class.pi-chevron-right]="!openGroups().has(group.label)"></i>
+        </button>
+        @if (openGroups().has(group.label)) {
+          @for (item of group.items; track item.route) {
+            <a class="nav-item" [routerLink]="item.route" routerLinkActive="active">
+              <i class="pi {{ item.icon }}"></i>
+              <span class="label">{{ item.label }}</span>
+            </a>
+          }
+        }
+      }
+    </nav>
+  </aside>
+
+  <main class="content">
+    <router-outlet />
+  </main>
+</div>

@@ -1,0 +1,35 @@
+<p-toast />
+
+<div class="page-header">
+  <h1>檢視角色</h1>
+  <div class="actions">
+    <p-button id="back-button" label="返回" icon="pi pi-arrow-left" severity="secondary" (onClick)="back()" />
+    @if (role()) {
+      <p-button id="edit-button" label="編輯" icon="pi pi-pencil" (onClick)="edit()" />
+    }
+  </div>
+</div>
+
+@if (role(); as r) {
+  <div class="card">
+    <h2>角色資料</h2>
+    <dl>
+      <dt>主代碼</dt><dd>{{ r.pkid }}</dd>
+      <dt>角色代碼</dt><dd>{{ r.roleId }}</dd>
+      <dt>角色名稱</dt><dd>{{ r.roleName }}</dd>
+      <dt>權限等級</dt><dd>{{ r.permissionLevel }}</dd>
+      <dt>描述</dt><dd>{{ r.description }}</dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h2>使用者（{{ r.userCount }}）</h2>
+    <div class="chips">
+      @for (u of assignedUsers(); track u) {
+        <p-tag [value]="u" severity="secondary" />
+      } @empty {
+        <span>沒有使用者</span>
+      }
+    </div>
+  </div>
+}

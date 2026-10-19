@@ -1,0 +1,7 @@
+﻿# .NET
+bin/
+obj/
+*.user
+.vs/
+
+# Node / Angular are covered by src/CMS.NG/.gitignore

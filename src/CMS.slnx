@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="CMS.API.Tests/CMS.API.Tests.csproj" />
+  <Project Path="CMS.API/CMS.API.csproj" />
+</Solution>
