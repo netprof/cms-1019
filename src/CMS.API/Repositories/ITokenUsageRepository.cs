@@ -16,6 +16,12 @@ public interface ITokenUsageRepository
     /// </summary>
     Task ReplaceSessionAsync(string sessionId, IReadOnlyList<TokenUsage> rows);
 
+    /// <summary>
+    /// Filtered usage summed by (UserId, UsageDate, Project, Model), with the user's name from AppUser.
+    /// Unordered and unpaged; the controller sorts, pages and totals.
+    /// </summary>
+    Task<IReadOnlyList<TokenUsageReportRow>> GetReportRowsAsync(TokenUsageReportFilter filter);
+
     /// <summary>Every row for <paramref name="model"/> (all sessions and dates), for cost recompute.</summary>
     Task<IEnumerable<TokenUsage>> GetByModelAsync(string model);
 

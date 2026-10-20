@@ -20,6 +20,41 @@ public class FakeTokenUsageRepository : ITokenUsageRepository
     public Task<bool> IsActiveUserAsync(string userId) =>
         Task.FromResult(_users.TryGetValue(userId, out var active) && active);
 
+    /// <summary>AppUser names for the report join.</summary>
+    private readonly Dictionary<string, string> _userNames = new() { ["helen"] = "Helen Wu", ["jenny"] = "Jenny Lin" };
+
+    /// <summary>Test arrange helper: stores a row as if it had been ingested (and priced).</summary>
+    public void Seed(TokenUsage row) => _rows.Add(row);
+
+    public Task<IReadOnlyList<TokenUsageReportRow>> GetReportRowsAsync(TokenUsageReportFilter filter)
+    {
+        static bool Contains(string value, string? part) =>
+            string.IsNullOrWhiteSpace(part) || value.Contains(part.Trim(), StringComparison.OrdinalIgnoreCase);
+
+        IReadOnlyList<TokenUsageReportRow> result = _rows
+            .Where(r => filter.From is null || r.UsageDate >= filter.From)
+            .Where(r => filter.To is null || r.UsageDate <= filter.To)
+            .Where(r => string.IsNullOrWhiteSpace(filter.UserId) || r.UserId == filter.UserId.Trim())
+            .Where(r => Contains(r.Project, filter.Project) && Contains(r.Model, filter.Model))
+            .GroupBy(r => (r.UserId, r.UsageDate, r.Project, r.Model))
+            .Select(g => new TokenUsageReportRow
+            {
+                UserId = g.Key.UserId,
+                UserName = _userNames[g.Key.UserId],
+                UsageDate = g.Key.UsageDate,
+                Project = g.Key.Project,
+                Model = g.Key.Model,
+                InputTokens = g.Sum(r => r.InputTokens),
+                CacheWrite5mTokens = g.Sum(r => r.CacheWrite5mTokens),
+                CacheWrite1hTokens = g.Sum(r => r.CacheWrite1hTokens),
+                CacheReadTokens = g.Sum(r => r.CacheReadTokens),
+                OutputTokens = g.Sum(r => r.OutputTokens),
+                Cost = g.Any(r => r.Cost.HasValue) ? g.Sum(r => r.Cost) : null, // SQL SUM ignores NULLs
+            })
+            .ToList();
+        return Task.FromResult(result);
+    }
+
     public Task ReplaceSessionAsync(string sessionId, IReadOnlyList<TokenUsage> rows)
     {
         _rows.RemoveAll(r => r.SessionId == sessionId);

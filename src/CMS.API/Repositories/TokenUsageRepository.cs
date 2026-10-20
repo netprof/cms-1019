@@ -50,6 +50,56 @@ public class TokenUsageRepository(IDbConnectionFactory connectionFactory) : ITok
         await tx.CommitAsync();
     }
 
+    public async Task<IReadOnlyList<TokenUsageReportRow>> GetReportRowsAsync(TokenUsageReportFilter filter)
+    {
+        var where = new List<string>();
+        var p = new DynamicParameters();
+
+        if (filter.From.HasValue)
+        {
+            where.Add("t.UsageDate >= @From");
+            p.Add("From", filter.From.Value);
+        }
+        if (filter.To.HasValue)
+        {
+            where.Add("t.UsageDate <= @To");
+            p.Add("To", filter.To.Value);
+        }
+        if (!string.IsNullOrWhiteSpace(filter.UserId))
+        {
+            where.Add("t.UserId = @UserId");
+            p.Add("UserId", filter.UserId.Trim());
+        }
+        if (!string.IsNullOrWhiteSpace(filter.Project))
+        {
+            where.Add("t.Project LIKE @Project");
+            p.Add("Project", $"%{filter.Project.Trim()}%");
+        }
+        if (!string.IsNullOrWhiteSpace(filter.Model))
+        {
+            where.Add("t.Model LIKE @Model");
+            p.Add("Model", $"%{filter.Model.Trim()}%");
+        }
+
+        // SUM(Cost) ignores NULLs and is NULL only when every row in the group is unpriced.
+        var sql = $"""
+            SELECT t.UserId, u.UserName, t.UsageDate, t.Project, t.Model,
+                   SUM(t.InputTokens) AS InputTokens,
+                   SUM(t.CacheWrite5mTokens) AS CacheWrite5mTokens,
+                   SUM(t.CacheWrite1hTokens) AS CacheWrite1hTokens,
+                   SUM(t.CacheReadTokens) AS CacheReadTokens,
+                   SUM(t.OutputTokens) AS OutputTokens,
+                   SUM(t.Cost) AS Cost
+            FROM TokenUsage t
+            JOIN AppUser u ON u.UserId = t.UserId
+            {(where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "")}
+            GROUP BY t.UserId, u.UserName, t.UsageDate, t.Project, t.Model
+            """;
+
+        using var conn = await connectionFactory.CreateOpenConnectionAsync();
+        return (await conn.QueryAsync<TokenUsageReportRow>(sql, p)).ToList();
+    }
+
     public async Task<IEnumerable<TokenUsage>> GetByModelAsync(string model)
     {
         using var conn = await connectionFactory.CreateOpenConnectionAsync();

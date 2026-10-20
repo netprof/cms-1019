@@ -63,7 +63,7 @@ List/filter, view, add, edit, delete of Claude model prices: five USD-per-millio
 
 ## TokenUsage ingest (`admin.sql`)
 
-API only (no UI yet): `POST /api/tokenusages` receives one Claude Code session's usage `{ sessionId, userId, project, rows: [{ date, model, inputTokens, cacheWrite5mTokens, cacheWrite1hTokens, cacheReadTokens, outputTokens }] }` from the SessionEnd hook and returns 204.
+API (the admin UI is the TokenUsage report below): `POST /api/tokenusages` receives one Claude Code session's usage `{ sessionId, userId, project, rows: [{ date, model, inputTokens, cacheWrite5mTokens, cacheWrite1hTokens, cacheReadTokens, outputTokens }] }` from the SessionEnd hook and returns 204.
 
 - Composite PK `(SessionId, UsageDate, Model)`, no `pkid`; FK `UserId` → `AppUser`. `UsageDate` is a Taipei (UTC+8) date; `UpdatedTime` is UTC.
 - First authenticated endpoint: `X-Api-Key` must equal SysConfig row `tokenUsageConfig` (JSON property `apiKey`, read by `ITokenUsageRepository.GetIngestApiKeyAsync`; missing → 500). The check is the `[RequireIngestApiKey]` authorization filter, so a bad key is 401 before model validation. All other endpoints stay anonymous.
@@ -79,3 +79,14 @@ API only (no UI yet): `POST /api/tokenusages` receives one Claude Code session's
 - Logic is in C#, not SQL: `Services/TokenCostService` (scoped). `PriceAsync(rows)` is called by the ingest endpoint before `ReplaceSessionAsync`; `RecomputeModelAsync(model)` is called after a successful `ModelPrice` create, update or delete, so a delete falls back to an earlier price or to `NULL`.
 - Recompute reads every row of the model (`ITokenUsageRepository.GetByModelAsync`) and writes costs back by key (`UpdateCostsAsync`, one transaction). `UpdatedTime` is not touched: it stays the ingest time. Model matching is case-insensitive, like SQL Server.
 - Tests: `TokenUsagePricingApiTests` (effective date, NULL cost, rounding, recompute on create/update/delete). `TokenUsagesApiTests` and `ModelPricesApiTests` now also register the other fake repository, since each controller touches both.
+
+## TokenUsage report (`admin.sql`)
+
+Read-only report page `/token-usages` (hand-written, not `/crud`): filter bar, server-paged sortable table, totals row, no export and no add/edit/delete. Menu: `系統管理 Admin → 用量報表 TokenUsage`.
+
+- `POST /api/tokenusages/report` (anonymous, unlike ingest) takes `{ from, to, userId, project, model, first, rows, sortField, sortOrder }` and returns `{ items, totalRecords, totals }`. Rows are `TokenUsage` summed by `(UserId, UsageDate, Project, Model)` and joined to `AppUser` for `userName`.
+- Filters: `from`/`to` are `DateOnly`, inclusive (`from > to` → 400); `userId` exact (p-select over `/api/lookups/appusers`); `project` and `model` contains.
+- Unlike the other lists, paging and sorting are server-side (PrimeNG `[lazy]` table): the repository returns every aggregated row of the filtered set and the controller sorts, pages (`first` ≥ 0, `rows` 1–500) and totals in memory. `sortField` is whitelisted to the camelCase column names (unknown → 400), `sortOrder` is 1/-1; ties break by date desc, user, project, model. Default: `usageDate` desc, 20 rows.
+- `tokenIn` = input + both cache writes + cache read (computed by the API, on rows and totals). `cost` is `SUM(Cost)`, which ignores unpriced rows and is `NULL` only when nothing in the group (or the whole set) is priced; the page shows `NULL` as blank.
+- The page's date range defaults to the 1st of this month through today (local dates); 清除 restores that. Filters/sort/page persist in `tokenusage-report-filters` / `-sort` / `-page`.
+- Report SQL verified against the real `CMS` DB (aggregation across sessions, NULL-ignoring cost sum, inclusive range, contains filters, empty result). `TokenUsageReportApiTests` also registers a fake `IModelPriceRepository`, since `TokenUsagesController` now takes `TokenCostService`.

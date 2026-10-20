@@ -42,6 +42,63 @@ public class TokenUsagesController(
         return NoContent();
     }
 
+    /// <summary>Usage summed by (user, date, project, model): one sorted page plus totals for the filtered set.</summary>
+    [HttpPost("report")]
+    public async Task<ActionResult<TokenUsageReport>> Report(TokenUsageReportQuery query)
+    {
+        if (query.From > query.To)
+            ModelState.AddModelError(nameof(query.To), "To must not be earlier than From.");
+        if (!ReportSortKeys.TryGetValue(query.SortField, out var sortKey))
+            ModelState.AddModelError(nameof(query.SortField), $"Cannot sort by '{query.SortField}'.");
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+        // Aggregated rows are few (users x days x projects x models), so sort and page in memory,
+        // as the other list pages do client-side.
+        var rows = await repository.GetReportRowsAsync(query);
+        var ordered = query.SortOrder == 1 ? rows.OrderBy(sortKey!) : rows.OrderByDescending(sortKey!);
+        var page = ordered
+            .ThenByDescending(r => r.UsageDate)
+            .ThenBy(r => r.UserId, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.Project, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.Model, StringComparer.OrdinalIgnoreCase)
+            .Skip(query.First)
+            .Take(query.Rows)
+            .ToList();
+
+        return Ok(new TokenUsageReport
+        {
+            Items = page,
+            TotalRecords = rows.Count,
+            Totals = new TokenUsageReportTotals
+            {
+                InputTokens = rows.Sum(r => r.InputTokens),
+                CacheWrite5mTokens = rows.Sum(r => r.CacheWrite5mTokens),
+                CacheWrite1hTokens = rows.Sum(r => r.CacheWrite1hTokens),
+                CacheReadTokens = rows.Sum(r => r.CacheReadTokens),
+                OutputTokens = rows.Sum(r => r.OutputTokens),
+                Cost = rows.Any(r => r.Cost.HasValue) ? rows.Sum(r => r.Cost) : null,
+            },
+        });
+    }
+
+    /// <summary>Sortable report columns by their JSON (camelCase) name; text compares case-insensitively like SQL Server.</summary>
+    private static readonly Dictionary<string, Func<TokenUsageReportRow, object?>> ReportSortKeys =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["usageDate"] = r => r.UsageDate,
+            ["userId"] = r => r.UserId.ToUpperInvariant(),
+            ["userName"] = r => r.UserName.ToUpperInvariant(),
+            ["project"] = r => r.Project.ToUpperInvariant(),
+            ["model"] = r => r.Model.ToUpperInvariant(),
+            ["inputTokens"] = r => r.InputTokens,
+            ["cacheWrite5mTokens"] = r => r.CacheWrite5mTokens,
+            ["cacheWrite1hTokens"] = r => r.CacheWrite1hTokens,
+            ["cacheReadTokens"] = r => r.CacheReadTokens,
+            ["outputTokens"] = r => r.OutputTokens,
+            ["tokenIn"] = r => r.TokenIn,
+            ["cost"] = r => r.Cost,
+        };
+
     /// <summary>Taipei is a fixed UTC+8 (no DST); the server itself has no time-zone handling.</summary>
     private static readonly TimeSpan TaipeiOffset = TimeSpan.FromHours(8);
 

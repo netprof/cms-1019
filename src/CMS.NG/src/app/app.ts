@@ -31,6 +31,7 @@ export class App {
         { label: '角色 AppRole', icon: 'pi-id-card', route: '/app-roles' },
         { label: '發布狀態 PublishStatus', icon: 'pi-flag', route: '/publish-statuses' },
         { label: '模型價格 ModelPrice', icon: 'pi-dollar', route: '/model-prices' },
+        { label: '用量報表 TokenUsage', icon: 'pi-chart-bar', route: '/token-usages' },
       ],
     },
     {
