@@ -21,9 +21,19 @@ describe('App', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('.nav-group')?.textContent).toContain('系統管理 Admin');
-    const link = el.querySelector('a.nav-item') as HTMLAnchorElement;
-    expect(link.textContent).toContain('角色 AppRole');
+    const links = Array.from(el.querySelectorAll('a.nav-item'));
+    const link = links.find((a) => a.textContent?.includes('角色 AppRole')) as HTMLAnchorElement;
+    expect(link).toBeDefined();
     expect(link.getAttribute('href')).toBe('/app-roles');
+  });
+
+  it('should show the AppUser entry first under 系統管理 Admin', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const link = (fixture.nativeElement as HTMLElement).querySelector('a.nav-item') as HTMLAnchorElement;
+
+    expect(link.textContent).toContain('使用者 AppUser');
+    expect(link.getAttribute('href')).toBe('/app-users');
   });
 
   it('should show the PublishStatus entry under 系統管理 Admin', () => {

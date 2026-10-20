@@ -27,6 +27,7 @@ export class App {
       label: '系統管理 Admin',
       icon: 'pi-shield',
       items: [
+        { label: '使用者 AppUser', icon: 'pi-user', route: '/app-users' },
         { label: '角色 AppRole', icon: 'pi-id-card', route: '/app-roles' },
         { label: '發布狀態 PublishStatus', icon: 'pi-flag', route: '/publish-statuses' },
       ],
