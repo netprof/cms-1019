@@ -1,10 +1,11 @@
-import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
+import { MessageService } from 'primeng/api';
 import { environment } from '@env/environment';
 import { signIn } from '../testing/auth';
-import { authInterceptor } from './auth.interceptor';
+import { SERVER_ERROR_FALLBACK, SERVER_ERROR_TOAST_KEY, authInterceptor } from './auth.interceptor';
 import { AUTH_STORAGE_KEY, AuthService, LOGIN_URL } from './auth.service';
 
 describe('authInterceptor', () => {
@@ -12,6 +13,7 @@ describe('authInterceptor', () => {
   let http: HttpClient;
   let controller: HttpTestingController;
   let router: Router;
+  let messages: MessageService;
 
   function setup() {
     TestBed.configureTestingModule({
@@ -19,12 +21,15 @@ describe('authInterceptor', () => {
         provideRouter([]),
         provideHttpClient(withInterceptors([authInterceptor])),
         provideHttpClientTesting(),
+        MessageService,
       ],
     });
     http = TestBed.inject(HttpClient);
     controller = TestBed.inject(HttpTestingController);
     router = TestBed.inject(Router);
     spyOn(router, 'navigate').and.resolveTo(true);
+    messages = TestBed.inject(MessageService);
+    spyOn(messages, 'add');
   }
 
   beforeEach(() => sessionStorage.clear());
@@ -111,6 +116,64 @@ describe('authInterceptor', () => {
     controller.expectOne(api).flush(null, { status: 500, statusText: 'Server Error' });
 
     expect(sessionStorage.getItem(AUTH_STORAGE_KEY)).not.toBeNull();
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
+  // ---- server errors ----
+
+  it('on a 500 toasts the safe message from the response and still fails the call', () => {
+    signIn();
+    setup();
+    let failed: unknown;
+
+    http.get(api).subscribe({ error: (e) => (failed = e) });
+    controller.expectOne(api).flush(
+      { status: 500, title: 'An unexpected error occurred.', traceId: '00-abc-01' },
+      { status: 500, statusText: 'Internal Server Error' },
+    );
+
+    expect(messages.add).toHaveBeenCalledOnceWith({
+      key: SERVER_ERROR_TOAST_KEY,
+      severity: 'error',
+      summary: '系統錯誤',
+      detail: 'An unexpected error occurred.',
+    });
+    expect((failed as HttpErrorResponse).status).toBe(500);
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
+  it('on a 5xx without a ProblemDetails body toasts the fallback message', () => {
+    signIn();
+    setup();
+
+    http.get(api).subscribe({ error: () => undefined });
+    controller.expectOne(api).flush('<html>Bad Gateway</html>', { status: 502, statusText: 'Bad Gateway' });
+
+    expect(messages.add).toHaveBeenCalledOnceWith(jasmine.objectContaining({ detail: SERVER_ERROR_FALLBACK }));
+  });
+
+  it('on a 401 redirects to the login page without a toast', () => {
+    signIn();
+    setup();
+
+    http.get(api).subscribe({ error: () => undefined });
+    controller.expectOne(api).flush(null, { status: 401, statusText: 'Unauthorized' });
+
+    expect(router.navigate).toHaveBeenCalledWith(['/login'], jasmine.anything());
+    expect(messages.add).not.toHaveBeenCalled();
+  });
+
+  it('passes a 400 validation problem through to the page without a toast', () => {
+    signIn();
+    setup();
+    let failed: unknown;
+    const problem = { status: 400, title: 'One or more validation errors occurred.', errors: { Description: ['必填'] } };
+
+    http.post(api, {}).subscribe({ error: (e) => (failed = e) });
+    controller.expectOne(api).flush(problem, { status: 400, statusText: 'Bad Request' });
+
+    expect((failed as HttpErrorResponse).error).toEqual(problem);
+    expect(messages.add).not.toHaveBeenCalled();
     expect(router.navigate).not.toHaveBeenCalled();
   });
 });

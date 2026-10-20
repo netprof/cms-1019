@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
+import { MessageService } from 'primeng/api';
 import { App } from './app';
 import { signIn } from './core/testing/auth';
 
@@ -11,7 +12,7 @@ describe('App', () => {
     signIn(['Admin']);
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideRouter([]), provideHttpClient()],
+      providers: [provideRouter([]), provideHttpClient(), MessageService],
     }).compileComponents();
   });
 

@@ -19,7 +19,7 @@ Git Bash `curl` corrupts Chinese characters in JSON bodies; the API answers 400 
 
 ## Angular bundle budget
 
-`ng build` warns that the initial bundle exceeds the 500 kB `maximumWarning` in `angular.json` (about 527 kB after Login; `maximumError` is 1 MB). Warning only. Raise `maximumWarning` when it becomes noise.
+`ng build` warns that the initial bundle exceeds the 500 kB `maximumWarning` in `angular.json` (about 583 kB after the server-error toast put `ToastModule` in the app shell; `maximumError` is 1 MB). Warning only. Raise `maximumWarning` when it becomes noise.
 
 ## `/crud` re-uses an existing spec
 

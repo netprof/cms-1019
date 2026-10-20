@@ -1,4 +1,5 @@
 using CMS.API.Data;
+using CMS.API.Middleware;
 using CMS.API.Repositories;
 using CMS.API.Services;
 using Dapper;
@@ -74,6 +75,10 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Outermost, so every unhandled exception becomes the same safe 500 (also in Development,
+// where it runs inside the developer exception page and keeps the stack trace off the wire).
+app.UseMiddleware<UnhandledExceptionMiddleware>();
 
 app.UseSwagger();
 app.UseSwaggerUI();

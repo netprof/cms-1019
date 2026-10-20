@@ -1,3 +1,5 @@
+<!-- 5xx toasts from authInterceptor; keyed, so the pages' own <p-toast /> don't repeat them. -->
+<p-toast [key]="serverErrorToastKey" />
 @if (auth.profile(); as profile) {
 <div class="layout" [class.collapsed]="collapsed()">
   <aside class="sidebar">
