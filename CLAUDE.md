@@ -8,13 +8,15 @@ Full-stack app on the existing SQL Server schema: .NET 9 Web API (Dapper, no EF)
 |------|---------|
 | `database\*.sql` | Schema source of truth (database `CMS` on `.\SQLEXPRESS`) |
 | `spec\{sub-system}\{Table}.md` | Per-feature specs written by `/crud` (`spec\*.spec.md` are samples, `spec\ui-sample-*.png` style references) |
+| `spec\{sub-system}\{feature-slug}.md` | Feature specs from `/to-spec` that span several tables (local copy of the GitHub spec issue) |
+| `tools\` | Developer-machine tools outside the app: `tools\token-usage\` is the Claude Code SessionEnd hook that reports token usage (Pester tests, README) |
 | `src\CMS.API\`, `src\CMS.API.Tests\` | Backend + xUnit tests (solution `src\CMS.slnx`) |
 | `src\CMS.NG\` | Frontend |
 
 ## Read when relevant
 
 - `spec\code-gen.convention.md` — scaffolding rules: naming, backend/frontend file layout, endpoints, list/form page rules. **Read before adding or changing a feature.**
-- `docs\patterns.md` — recipes: FK deletes/cascades, non-identity keys, server-controlled columns, `SysConfig`, n-n vs child tables, lookups, sticky form toolbar, dates, test mocking.
+- `docs\patterns.md` — recipes: FK deletes/cascades, non-identity keys, server-controlled columns, `SysConfig`, cross-repository transactions, n-n vs child tables, lookups, sticky form toolbar, dates, test mocking.
 - `docs\features.md` — one entry per shipped feature. Read before touching a feature or linking to one; append an entry when a feature ships.
 - `docs\gotchas.md` — tooling pitfalls: smoke-testing SQL beside the dev server, curl encoding, bundle budget, `/crud` spec re-use.
 

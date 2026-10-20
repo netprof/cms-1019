@@ -41,9 +41,9 @@ Every Claude Code session reports its own token consumption to the CMS API autom
 
 ## Implementation Decisions
 
-- **Data source.** A PowerShell 5.1 script (Windows only) runs as a user-level `SessionEnd` hook. It reads the hook's stdin (`session_id`, `transcript_path`, `cwd`), the main transcript, and the session's subagent transcripts. It deduplicates assistant entries by `message.id`, skips model `<synthetic>`, converts each entry's UTC timestamp to a date at fixed UTC+8, and sums the five token types per (date, model). The script and its install instructions ship in the repo under a tools folder.
+- **Data source.** A PowerShell 5.1 script (Windows only) runs as a user-level `SessionEnd` hook. It reads the hook's stdin (`session_id`, `transcript_path`, `cwd`), the main transcript, and the session's subagent transcripts. It deduplicates assistant entries by `message.id`, keeping the largest value of each usage field (a streamed reply's earlier lines can carry a partial `output_tokens`), skips model `<synthetic>`, converts each entry's UTC timestamp to a date at fixed UTC+8, and sums the five token types per (date, model). The script and its install instructions ship in the repo under a tools folder.
 - **Hook config.** A per-user JSON file in the Claude config directory holds `apiUrl`, `apiKey` and `userId`. `apiUrl` is `http://localhost:5000` for now. If any value is missing, the hook logs one line and exits successfully.
-- **Delivery.** One POST per session with a 5-second timeout. On failure the payload is written to a spool folder in the Claude config directory. Each run re-sends the spooled payloads first and deletes each one after it succeeds. Re-sending is safe because ingestion replaces the whole session.
+- **Delivery.** One POST per session with a 5-second timeout. On failure the payload is written to a spool folder in the Claude config directory. Each run re-sends the spooled payloads first and deletes each one after it succeeds. Re-sending is safe because ingestion replaces the whole session. A payload the API rejects with HTTP 400 is moved to the spool's `rejected\` subfolder and logged, never retried; 401 (key) and network failures stay in the spool.
 - **Hook seam.** The parsing logic is a pure function from (transcript paths, cwd, session ID, user ID) to the payload object, kept separate from HTTP and spool I/O so it can be tested in isolation.
 - **Ingest API contract.** POST body: `{ sessionId, userId, project, rows: [{ date, model, inputTokens, cacheWrite5mTokens, cacheWrite1hTokens, cacheReadTokens, outputTokens }] }`. An empty `rows` clears the session.
 - **Ingest authentication.** The `X-Api-Key` header is compared with a key stored in `SysConfig`. A missing or wrong key returns 401. This is the API's first authenticated endpoint; the other endpoints stay anonymous.
@@ -111,6 +111,7 @@ Every Claude Code session reports its own token consumption to the CMS API autom
 - Deploying the API beyond `http://localhost:5000`.
 - Backfilling usage from sessions that ended before the hook was installed.
 - Currencies other than USD.
+- Prompt-size price tiers. Claude Haiku 5.5 costs more for prompts over 100,000 tokens ($0.50 / $0.625 / $1 / $0.05 / $2.50 per MTok, against $0.10 / $0.125 / $0.20 / $0.01 / $0.50 up to 100K), but `ModelPrice` holds one price set per model and date, and the hook sends usage summed per date and model, which loses the per-reply prompt size the tier depends on. Haiku 5.5 is priced at its ≤100K tier, which under-prices long-prompt replies.
 
 ## Further Notes
 
