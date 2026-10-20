@@ -1,0 +1,54 @@
+<p-toast />
+
+<form [formGroup]="form" (ngSubmit)="save()">
+  <div class="page-header sticky-toolbar" id="form-toolbar">
+    <h1>{{ isEdit ? '編輯模型價格' : '新增模型價格' }}</h1>
+    <div class="actions">
+      <p-button id="cancel-button" label="取消" icon="pi pi-times" severity="secondary" (onClick)="cancel()" />
+      <p-button id="save-button" type="submit" label="儲存" icon="pi pi-check" [loading]="saving()" />
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>模型價格資料</h2>
+
+    <div class="field">
+      <label for="model">模型<span class="req">*</span></label>
+      <input pInputText id="model" formControlName="model" maxlength="100" placeholder="claude-opus-5-5" />
+      @if (invalid('model')) { <small class="error">請輸入模型（最多 100 字）</small> }
+    </div>
+
+    <div class="field">
+      <label for="effectiveDate">生效日<span class="req">*</span></label>
+      <p-datepicker
+        inputId="effectiveDate"
+        formControlName="effectiveDate"
+        dateFormat="yy-mm-dd"
+        [showIcon]="true"
+        appendTo="body"
+        [style]="{ width: '100%' }"
+      />
+      @if (invalid('effectiveDate')) { <small class="error">請選擇生效日</small> }
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>價格 <small>US$ / 百萬 tokens</small></h2>
+
+    @for (f of priceFields; track f.name) {
+      <div class="field">
+        <label [for]="f.name">{{ f.label }}<span class="req">*</span></label>
+        <p-inputnumber
+          [inputId]="f.name"
+          [formControlName]="f.name"
+          [min]="0"
+          [minFractionDigits]="0"
+          [maxFractionDigits]="6"
+          mode="decimal"
+          [style]="{ width: '100%' }"
+        />
+        @if (invalid(f.name)) { <small class="error">請輸入 0 以上的價格</small> }
+      </div>
+    }
+  </div>
+</form>

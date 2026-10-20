@@ -21,6 +21,8 @@ public class TokenUsagesApiTests : IClassFixture<WebApplicationFactory<Program>>
         {
             services.RemoveAll<ITokenUsageRepository>();
             services.AddSingleton<ITokenUsageRepository>(_repository);
+            services.RemoveAll<IModelPriceRepository>(); // ingest prices rows; pricing itself is in TokenUsagePricingApiTests
+            services.AddSingleton<IModelPriceRepository>(new FakeModelPriceRepository());
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(new FixedTimeProvider(Now));
         }));
@@ -80,7 +82,7 @@ public class TokenUsagesApiTests : IClassFixture<WebApplicationFactory<Program>>
     // ---- replace semantics ----
 
     [Fact]
-    public async Task Ingest_NewSession_StoresRowsWithNullCost()
+    public async Task Ingest_NewSession_StoresRows()
     {
         var response = await PostAsync(Payload());
 
@@ -90,7 +92,6 @@ public class TokenUsagesApiTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal(("helen", "netprof/cms"), (row.UserId, row.Project));
         Assert.Equal([10L, 20L, 30L, 40L, 50L],
             [row.InputTokens, row.CacheWrite5mTokens, row.CacheWrite1hTokens, row.CacheReadTokens, row.OutputTokens]);
-        Assert.Null(row.Cost);
         Assert.Equal(DateTimeKind.Utc, row.UpdatedTime.Kind);
     }
 

@@ -49,4 +49,29 @@ public class TokenUsageRepository(IDbConnectionFactory connectionFactory) : ITok
             """, rows, tx);
         await tx.CommitAsync();
     }
+
+    public async Task<IEnumerable<TokenUsage>> GetByModelAsync(string model)
+    {
+        using var conn = await connectionFactory.CreateOpenConnectionAsync();
+        return await conn.QueryAsync<TokenUsage>(
+            """
+            SELECT SessionId, UsageDate, Model, UserId, Project,
+                   InputTokens, CacheWrite5mTokens, CacheWrite1hTokens, CacheReadTokens, OutputTokens,
+                   Cost, UpdatedTime
+            FROM TokenUsage
+            WHERE Model = @model
+            """, new { model });
+    }
+
+    public async Task UpdateCostsAsync(IReadOnlyList<TokenUsage> rows)
+    {
+        using var conn = await connectionFactory.CreateOpenConnectionAsync();
+        using var tx = conn.BeginTransaction();
+        await conn.ExecuteAsync(
+            """
+            UPDATE TokenUsage SET Cost = @Cost
+            WHERE SessionId = @SessionId AND UsageDate = @UsageDate AND Model = @Model
+            """, rows, tx);
+        await tx.CommitAsync();
+    }
 }

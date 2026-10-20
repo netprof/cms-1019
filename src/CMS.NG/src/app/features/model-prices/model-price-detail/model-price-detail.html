@@ -1,0 +1,26 @@
+<p-toast />
+
+<div class="page-header">
+  <h1>檢視模型價格</h1>
+  <div class="actions">
+    <p-button id="back-button" label="返回" icon="pi pi-arrow-left" severity="secondary" (onClick)="back()" />
+    @if (price()) {
+      <p-button id="edit-button" label="編輯" icon="pi pi-pencil" (onClick)="edit()" />
+    }
+  </div>
+</div>
+
+@if (price(); as p) {
+  <div class="card">
+    <h2>模型價格資料 <small>US$ / 百萬 tokens</small></h2>
+    <dl>
+      <dt>模型</dt><dd>{{ p.model }}</dd>
+      <dt>生效日</dt><dd>{{ p.effectiveDate }}</dd>
+      <dt>輸入</dt><dd>{{ p.inputPrice | number: '1.2-6' }}</dd>
+      <dt>快取寫入 5 分鐘</dt><dd>{{ p.cacheWrite5mPrice | number: '1.2-6' }}</dd>
+      <dt>快取寫入 1 小時</dt><dd>{{ p.cacheWrite1hPrice | number: '1.2-6' }}</dd>
+      <dt>快取讀取</dt><dd>{{ p.cacheReadPrice | number: '1.2-6' }}</dd>
+      <dt>輸出</dt><dd>{{ p.outputPrice | number: '1.2-6' }}</dd>
+    </dl>
+  </div>
+}
