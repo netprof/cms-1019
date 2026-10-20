@@ -8,11 +8,11 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CMS.API.Tests;
 
-public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
+public class CoursesApiTests : IClassFixture<ApiTestFactory>
 {
     private readonly WebApplicationFactory<Program> _factory;
 
-    public CoursesApiTests(WebApplicationFactory<Program> factory)
+    public CoursesApiTests(ApiTestFactory factory)
     {
         // Each test class instance gets its own fake repository (fresh data).
         _factory = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
@@ -57,7 +57,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task GetAll_ReturnsCoursesOrderedByDisplayOrderWithNavObjects()
     {
-        var courses = await _factory.CreateClient().GetFromJsonAsync<List<Course>>("/api/courses");
+        var courses = await _factory.CreateAuthenticatedClient().GetFromJsonAsync<List<Course>>("/api/courses");
 
         Assert.NotNull(courses);
         Assert.Equal([2, 1, 3], courses.Select(c => c.Pkid));
@@ -72,7 +72,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_ByKeywordOnTitle_Filters()
     {
-        var courses = await QueryAsync(_factory.CreateClient(), new CourseQuery { Keyword = "azure" });
+        var courses = await QueryAsync(_factory.CreateAuthenticatedClient(), new CourseQuery { Keyword = "azure" });
 
         Assert.Equal([1], courses.Select(c => c.Pkid));
     }
@@ -80,7 +80,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_ByKeywordOnCourseId_Filters()
     {
-        var courses = await QueryAsync(_factory.CreateClient(), new CourseQuery { Keyword = "ws2022" });
+        var courses = await QueryAsync(_factory.CreateAuthenticatedClient(), new CourseQuery { Keyword = "ws2022" });
 
         Assert.Equal([3], courses.Select(c => c.Pkid));
     }
@@ -88,7 +88,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_ByPartner_Filters()
     {
-        var courses = await QueryAsync(_factory.CreateClient(), new CourseQuery { PartnerPkid = 1 });
+        var courses = await QueryAsync(_factory.CreateAuthenticatedClient(), new CourseQuery { PartnerPkid = 1 });
 
         Assert.Equal([1, 3], courses.Select(c => c.Pkid));
     }
@@ -96,7 +96,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_ByCourseGroup_Filters()
     {
-        var courses = await QueryAsync(_factory.CreateClient(), new CourseQuery { CourseGroupPkid = 10 });
+        var courses = await QueryAsync(_factory.CreateAuthenticatedClient(), new CourseQuery { CourseGroupPkid = 10 });
 
         Assert.Equal([1, 3], courses.Select(c => c.Pkid));
     }
@@ -104,7 +104,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_ByPublishStatus_Filters()
     {
-        var courses = await QueryAsync(_factory.CreateClient(), new CourseQuery { PublishStatusPkid = 2 });
+        var courses = await QueryAsync(_factory.CreateAuthenticatedClient(), new CourseQuery { PublishStatusPkid = 2 });
 
         Assert.Equal([3], courses.Select(c => c.Pkid));
     }
@@ -112,7 +112,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_ByCanRepeat_Filters()
     {
-        var courses = await QueryAsync(_factory.CreateClient(), new CourseQuery { CanRepeat = false });
+        var courses = await QueryAsync(_factory.CreateAuthenticatedClient(), new CourseQuery { CanRepeat = false });
 
         Assert.Equal([2, 3], courses.Select(c => c.Pkid));
     }
@@ -120,7 +120,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_ByScheduleOnRange_IsInclusive()
     {
-        var courses = await QueryAsync(_factory.CreateClient(), new CourseQuery
+        var courses = await QueryAsync(_factory.CreateAuthenticatedClient(), new CourseQuery
         {
             ScheduleOnFrom = new DateOnly(2026, 3, 1),
             ScheduleOnTo = new DateOnly(2026, 6, 1),
@@ -132,7 +132,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_ByScheduleOffRange_Filters()
     {
-        var courses = await QueryAsync(_factory.CreateClient(), new CourseQuery
+        var courses = await QueryAsync(_factory.CreateAuthenticatedClient(), new CourseQuery
         {
             ScheduleOffTo = new DateOnly(2036, 2, 1),
         });
@@ -143,7 +143,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_EmptyFilter_ReturnsAll()
     {
-        var courses = await QueryAsync(_factory.CreateClient(), new CourseQuery());
+        var courses = await QueryAsync(_factory.CreateAuthenticatedClient(), new CourseQuery());
 
         Assert.Equal([2, 1, 3], courses.Select(c => c.Pkid));
     }
@@ -153,7 +153,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task GetById_Existing_ReturnsCourseWithLinkIds()
     {
-        var course = await _factory.CreateClient().GetFromJsonAsync<Course>("/api/courses/1");
+        var course = await _factory.CreateAuthenticatedClient().GetFromJsonAsync<Course>("/api/courses/1");
 
         Assert.Equal("Azure 基礎", course!.Title);
         Assert.Equal(new DateOnly(2026, 1, 1), course.ScheduleOn);
@@ -165,7 +165,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task GetById_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().GetAsync("/api/courses/99");
+        var response = await _factory.CreateAuthenticatedClient().GetAsync("/api/courses/99");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -173,7 +173,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task GetById_NonNumeric_Returns404()
     {
-        var response = await _factory.CreateClient().GetAsync("/api/courses/abc");
+        var response = await _factory.CreateAuthenticatedClient().GetAsync("/api/courses/abc");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -183,7 +183,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Create_ValidRequest_Returns201WithLinks()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.PostAsJsonAsync("/api/courses", NewRequest());
 
@@ -208,7 +208,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
         request.Material = "";
         request.CertificationPkids = [100, 100];
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/courses", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/courses", request);
 
         response.EnsureSuccessStatusCode();
         var created = await response.Content.ReadFromJsonAsync<Course>();
@@ -225,7 +225,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
         var request = NewRequest();
         request.Title = "";
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/courses", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/courses", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -236,7 +236,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
         var request = NewRequest();
         request.CourseId = new string('x', 51);
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/courses", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/courses", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -247,7 +247,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
         var request = NewRequest();
         request.PartnerPkid = 0;
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/courses", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/courses", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -258,7 +258,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
         var request = NewRequest();
         request.ScheduleOff = request.ScheduleOn.AddDays(-1);
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/courses", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/courses", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -268,7 +268,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Update_Existing_ChangesFieldsAndLinks()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
         var request = NewRequest(2);
         request.Title = "CCNA 進階";
         request.PartnerPkid = 2;
@@ -289,7 +289,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Update_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().PutAsJsonAsync("/api/courses", NewRequest(99));
+        var response = await _factory.CreateAuthenticatedClient().PutAsJsonAsync("/api/courses", NewRequest(99));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -300,7 +300,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
         var request = NewRequest(2);
         request.ScheduleOff = request.ScheduleOn.AddDays(-1);
 
-        var response = await _factory.CreateClient().PutAsJsonAsync("/api/courses", request);
+        var response = await _factory.CreateAuthenticatedClient().PutAsJsonAsync("/api/courses", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -310,7 +310,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Delete_Existing_Returns204ThenGone()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.DeleteAsync("/api/courses/3");
 
@@ -321,7 +321,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Delete_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().DeleteAsync("/api/courses/99");
+        var response = await _factory.CreateAuthenticatedClient().DeleteAsync("/api/courses/99");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -331,7 +331,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Lookups_Certifications_ReturnsSlimListOrderedByTitle()
     {
-        var lookups = await _factory.CreateClient()
+        var lookups = await _factory.CreateAuthenticatedClient()
             .GetFromJsonAsync<List<CertificationLookup>>("/api/lookups/certifications");
 
         Assert.Equal(["AZ-900", "CCNA"], lookups!.Select(l => l.Title));
@@ -341,7 +341,7 @@ public class CoursesApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Lookups_JobCategories_ReturnsSlimListOrderedByPkid()
     {
-        var lookups = await _factory.CreateClient()
+        var lookups = await _factory.CreateAuthenticatedClient()
             .GetFromJsonAsync<List<JobCategoryLookup>>("/api/lookups/jobcategories");
 
         Assert.Equal([5, 6], lookups!.Select(l => (int)l.Pkid));

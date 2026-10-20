@@ -10,14 +10,14 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CMS.API.Tests;
 
-public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
+public class AppUsersApiTests : IClassFixture<ApiTestFactory>
 {
     private readonly WebApplicationFactory<Program> _factory;
     private readonly FakeAppUserRepository _repository = new();
 
     private static readonly string DefaultHash = PasswordHasher.Sha256Hex(FakeAppUserRepository.DefaultPassword);
 
-    public AppUsersApiTests(WebApplicationFactory<Program> factory)
+    public AppUsersApiTests(ApiTestFactory factory)
     {
         // Each test class instance gets its own fake repository (fresh data).
         _factory = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
@@ -37,7 +37,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task GetAll_ReturnsUsersWithRoleCount_NoPasswordHash()
     {
-        var response = await _factory.CreateClient().GetAsync("/api/appusers");
+        var response = await _factory.CreateAuthenticatedClient().GetAsync("/api/appusers");
 
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync();
@@ -51,7 +51,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_ByKeyword_FiltersUsers()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/appusers/query", new AppUserQuery { Keyword = "jen" });
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/appusers/query", new AppUserQuery { Keyword = "jen" });
 
         var users = await response.Content.ReadFromJsonAsync<List<AppUser>>();
         Assert.Equal(["jenny"], users!.Select(u => u.UserId));
@@ -60,7 +60,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_ByIsActive_FiltersUsers()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/appusers/query", new AppUserQuery { IsActive = false });
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/appusers/query", new AppUserQuery { IsActive = false });
 
         var users = await response.Content.ReadFromJsonAsync<List<AppUser>>();
         Assert.Equal(["jenny"], users!.Select(u => u.UserId));
@@ -69,7 +69,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_ByRoleId_FiltersUsers()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/appusers/query", new AppUserQuery { RoleId = "Admin" });
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/appusers/query", new AppUserQuery { RoleId = "Admin" });
 
         var users = await response.Content.ReadFromJsonAsync<List<AppUser>>();
         Assert.Equal(["helen"], users!.Select(u => u.UserId));
@@ -78,7 +78,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_ByPasswordUpdatedRange_IsInclusive()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/appusers/query",
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/appusers/query",
             new AppUserQuery { PasswordUpdatedFrom = new DateOnly(2026, 3, 5), PasswordUpdatedTo = new DateOnly(2026, 3, 5) });
 
         var users = await response.Content.ReadFromJsonAsync<List<AppUser>>();
@@ -88,7 +88,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_EmptyFilter_ReturnsAll()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/appusers/query", new AppUserQuery());
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/appusers/query", new AppUserQuery());
 
         var users = await response.Content.ReadFromJsonAsync<List<AppUser>>();
         Assert.Equal(2, users!.Count);
@@ -99,7 +99,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task GetById_Existing_ReturnsUserWithRoleIds()
     {
-        var user = await _factory.CreateClient().GetFromJsonAsync<AppUser>("/api/appusers/helen");
+        var user = await _factory.CreateAuthenticatedClient().GetFromJsonAsync<AppUser>("/api/appusers/helen");
 
         Assert.Equal("Helen", user!.UserName);
         Assert.Equal(["Admin", "User"], user.RoleIds);
@@ -108,7 +108,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task GetById_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().GetAsync("/api/appusers/nope");
+        var response = await _factory.CreateAuthenticatedClient().GetAsync("/api/appusers/nope");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -118,7 +118,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Create_ValidRequest_Returns201AndStoresDefaultPasswordHash()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.PostAsJsonAsync("/api/appusers", NewRequest(" kevin "));
 
@@ -135,7 +135,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Create_IgnoresClientSuppliedPasswordHash()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
         var body = new { userId = "mallory", userName = "Mallory", isActive = true, roleIds = Array.Empty<string>(), passwordHash = "attacker" };
 
         var response = await client.PostAsJsonAsync("/api/appusers", body);
@@ -147,7 +147,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Create_DuplicateUserId_Returns409()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/appusers", NewRequest("helen"));
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/appusers", NewRequest("helen"));
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
@@ -158,7 +158,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
         var request = NewRequest();
         request.UserName = "";
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/appusers", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/appusers", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -168,7 +168,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Update_Existing_ChangesFieldsAndRoles_KeepsPasswordHash()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
         var request = new AppUserRequest { UserId = "jenny", UserName = "Jenny Lin", IsActive = true, RoleIds = ["Admin", "User", "User"] };
 
         var response = await client.PutAsJsonAsync("/api/appusers", request);
@@ -187,7 +187,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     {
         var body = new { userId = "helen", userName = "Helen", isActive = true, roleIds = new[] { "Admin" }, passwordHash = "attacker" };
 
-        var response = await _factory.CreateClient().PutAsJsonAsync("/api/appusers", body);
+        var response = await _factory.CreateAuthenticatedClient().PutAsJsonAsync("/api/appusers", body);
 
         response.EnsureSuccessStatusCode();
         Assert.Equal("seed-hash-helen", _repository.StoredHash("helen"));
@@ -196,7 +196,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Update_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().PutAsJsonAsync("/api/appusers", NewRequest("nope"));
+        var response = await _factory.CreateAuthenticatedClient().PutAsJsonAsync("/api/appusers", NewRequest("nope"));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -206,7 +206,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task ResetPassword_Existing_StoresDefaultHashAndStampsTime()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
         var before = DateTime.UtcNow.AddSeconds(-1);
 
         var response = await client.PostAsync("/api/appusers/helen/reset-password", null);
@@ -221,7 +221,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task ResetPassword_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().PostAsync("/api/appusers/nope/reset-password", null);
+        var response = await _factory.CreateAuthenticatedClient().PostAsync("/api/appusers/nope/reset-password", null);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -231,7 +231,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Delete_Existing_Returns204ThenGone()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.DeleteAsync("/api/appusers/jenny");
 
@@ -242,7 +242,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Delete_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().DeleteAsync("/api/appusers/nope");
+        var response = await _factory.CreateAuthenticatedClient().DeleteAsync("/api/appusers/nope");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -252,7 +252,7 @@ public class AppUsersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Lookups_AppRoles_ReturnsRoles()
     {
-        var roles = await _factory.CreateClient().GetFromJsonAsync<List<AppRoleLookup>>("/api/lookups/approles");
+        var roles = await _factory.CreateAuthenticatedClient().GetFromJsonAsync<List<AppRoleLookup>>("/api/lookups/approles");
 
         Assert.NotNull(roles);
         Assert.Equal(["Admin", "User"], roles.Select(r => r.RoleId));

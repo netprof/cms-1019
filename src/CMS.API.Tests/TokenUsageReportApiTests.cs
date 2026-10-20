@@ -10,14 +10,14 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CMS.API.Tests;
 
-public class TokenUsageReportApiTests : IClassFixture<WebApplicationFactory<Program>>
+public class TokenUsageReportApiTests : IClassFixture<ApiTestFactory>
 {
     private const string Route = "/api/tokenusages/report";
 
     private readonly WebApplicationFactory<Program> _factory;
     private readonly FakeTokenUsageRepository _repository = new();
 
-    public TokenUsageReportApiTests(WebApplicationFactory<Program> factory)
+    public TokenUsageReportApiTests(ApiTestFactory factory)
     {
         _factory = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
         {
@@ -53,7 +53,7 @@ public class TokenUsageReportApiTests : IClassFixture<WebApplicationFactory<Prog
         });
 
     private async Task<HttpResponseMessage> PostAsync(object query) =>
-        await _factory.CreateClient().PostAsJsonAsync(Route, query);
+        await _factory.CreateAuthenticatedClient().PostAsJsonAsync(Route, query);
 
     private async Task<TokenUsageReport> ReportAsync(object query)
     {

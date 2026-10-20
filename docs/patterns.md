@@ -68,6 +68,8 @@ Every form page pins its Save/Cancel toolbar so it stays reachable on long forms
 ## Tests
 
 - Backend tests run the real HTTP pipeline through `WebApplicationFactory<Program>` against an in-memory fake repository (`FakeAppRoleRepository` pattern); they never hit SQL, so verify new SQL manually (see `docs\gotchas.md` for smoke-testing without stopping the dev server).
+- Endpoints need a bearer token, so test classes take `IClassFixture<ApiTestFactory>` (swaps in `FakeAuthRepository`, whose signing key the test tokens use) and call `_factory.CreateAuthenticatedClient()` instead of `CreateClient()`. Use a plain `CreateClient()` only to test anonymous or 401 behaviour (`AuthorizationApiTests`, `TokenUsagesApiTests`).
+- Frontend specs of the app shell sign in first with `signIn(roles)` from `core/testing/auth.ts` (writes a fake profile to session storage before `AuthService` is created); `fakeToken(roles)` builds just the token.
 - Frontend specs: when mocking `ActivatedRoute`, list its provider **after** `provideRouter(...)`, or the router's own provider overrides it.
 
 ## Dependency pins

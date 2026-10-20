@@ -8,11 +8,11 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CMS.API.Tests;
 
-public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
+public class PartnersApiTests : IClassFixture<ApiTestFactory>
 {
     private readonly WebApplicationFactory<Program> _factory;
 
-    public PartnersApiTests(WebApplicationFactory<Program> factory)
+    public PartnersApiTests(ApiTestFactory factory)
     {
         // Each test class instance gets its own fake repository (fresh data).
         _factory = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
@@ -38,7 +38,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task GetAll_ReturnsAllPartnersOrderedByDisplayOrder()
     {
-        var partners = await _factory.CreateClient().GetFromJsonAsync<List<Partner>>("/api/partners");
+        var partners = await _factory.CreateAuthenticatedClient().GetFromJsonAsync<List<Partner>>("/api/partners");
 
         Assert.NotNull(partners);
         Assert.Equal([2, 1, 3], partners.Select(p => (int)p.Pkid));
@@ -48,7 +48,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_ByKeywordOnName_FiltersPartners()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/partners/query",
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/partners/query",
             new PartnerQuery { Keyword = "micro" });
 
         response.EnsureSuccessStatusCode();
@@ -59,7 +59,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_ByKeywordOnAppKey_FiltersPartners()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/partners/query",
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/partners/query",
             new PartnerQuery { Keyword = "csco" });
 
         var partners = await response.Content.ReadFromJsonAsync<List<Partner>>();
@@ -69,7 +69,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_ByKeywordOnMenuName_FiltersPartners()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/partners/query",
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/partners/query",
             new PartnerQuery { Keyword = "甲骨文" });
 
         var partners = await response.Content.ReadFromJsonAsync<List<Partner>>();
@@ -79,7 +79,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Query_EmptyFilter_ReturnsAllInDisplayOrder()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/partners/query", new PartnerQuery());
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/partners/query", new PartnerQuery());
 
         var partners = await response.Content.ReadFromJsonAsync<List<Partner>>();
         Assert.Equal([2, 1, 3], partners!.Select(p => (int)p.Pkid));
@@ -90,7 +90,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task GetById_Existing_ReturnsPartner()
     {
-        var partner = await _factory.CreateClient().GetFromJsonAsync<Partner>("/api/partners/2");
+        var partner = await _factory.CreateAuthenticatedClient().GetFromJsonAsync<Partner>("/api/partners/2");
 
         Assert.Equal("Cisco", partner!.Name);
         Assert.Equal("csco", partner.AppKey);
@@ -100,7 +100,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task GetById_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().GetAsync("/api/partners/99");
+        var response = await _factory.CreateAuthenticatedClient().GetAsync("/api/partners/99");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -108,7 +108,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task GetById_NonNumeric_Returns404()
     {
-        var response = await _factory.CreateClient().GetAsync("/api/partners/abc");
+        var response = await _factory.CreateAuthenticatedClient().GetAsync("/api/partners/abc");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -118,7 +118,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Create_ValidRequest_Returns201WithGeneratedPkid()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.PostAsJsonAsync("/api/partners", NewRequest());
 
@@ -134,7 +134,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Create_TrimsTextAndStoresBlankImageAsNull()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
         var request = NewRequest();
         request.Name = "  VMware  ";
         request.AppKey = " vmw ";
@@ -155,7 +155,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
         var request = NewRequest();
         request.Name = "";
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/partners", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/partners", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -166,7 +166,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
         var request = NewRequest();
         request.AppKey = "";
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/partners", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/partners", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -177,7 +177,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
         var request = NewRequest();
         request.AppKey = new string('x', 11);
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/partners", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/partners", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -188,7 +188,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
         var request = NewRequest();
         request.Name = new string('x', 51);
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/partners", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/partners", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -199,7 +199,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
         var request = NewRequest();
         request.NameOnPartnerMenu = "";
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/partners", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/partners", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -209,7 +209,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Update_Existing_ChangesFields()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
         var request = NewRequest(2);
         request.Name = "Cisco Systems";
         request.DisplayOrder = 5;
@@ -227,7 +227,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Update_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().PutAsJsonAsync("/api/partners", NewRequest(99));
+        var response = await _factory.CreateAuthenticatedClient().PutAsJsonAsync("/api/partners", NewRequest(99));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -237,7 +237,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Delete_Existing_Returns204ThenGone()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.DeleteAsync("/api/partners/3");
 
@@ -248,7 +248,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Delete_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().DeleteAsync("/api/partners/99");
+        var response = await _factory.CreateAuthenticatedClient().DeleteAsync("/api/partners/99");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -258,7 +258,7 @@ public class PartnersApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Lookups_Partners_ReturnsSlimListInDisplayOrder()
     {
-        var lookups = await _factory.CreateClient()
+        var lookups = await _factory.CreateAuthenticatedClient()
             .GetFromJsonAsync<List<PartnerLookup>>("/api/lookups/partners");
 
         Assert.Equal(["Cisco", "Microsoft", "Oracle"], lookups!.Select(l => l.Name));

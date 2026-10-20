@@ -8,12 +8,12 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CMS.API.Tests;
 
-public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>>
+public class CourseGroupsApiTests : IClassFixture<ApiTestFactory>
 {
     private readonly WebApplicationFactory<Program> _factory;
     private readonly FakeCourseGroupRepository _repository = new();
 
-    public CourseGroupsApiTests(WebApplicationFactory<Program> factory)
+    public CourseGroupsApiTests(ApiTestFactory factory)
     {
         // Each test class instance gets its own fake repository (fresh data).
         _factory = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
@@ -34,7 +34,7 @@ public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task GetAll_ReturnsAllGroupsOrderedByPkid()
     {
-        var groups = await _factory.CreateClient().GetFromJsonAsync<List<CourseGroup>>("/api/coursegroups");
+        var groups = await _factory.CreateAuthenticatedClient().GetFromJsonAsync<List<CourseGroup>>("/api/coursegroups");
 
         Assert.NotNull(groups);
         Assert.Equal([1, 2, 3], groups.Select(g => (int)g.Pkid));
@@ -44,7 +44,7 @@ public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task Query_ByKeyword_FiltersOnDescription()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/coursegroups/query",
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/coursegroups/query",
             new CourseGroupQuery { Keyword = "進階" });
 
         response.EnsureSuccessStatusCode();
@@ -55,7 +55,7 @@ public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task Query_EmptyFilter_ReturnsAllInPkidOrder()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/coursegroups/query", new CourseGroupQuery());
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/coursegroups/query", new CourseGroupQuery());
 
         var groups = await response.Content.ReadFromJsonAsync<List<CourseGroup>>();
         Assert.Equal([1, 2, 3], groups!.Select(g => (int)g.Pkid));
@@ -66,7 +66,7 @@ public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task GetById_Existing_ReturnsGroup()
     {
-        var group = await _factory.CreateClient().GetFromJsonAsync<CourseGroup>("/api/coursegroups/2");
+        var group = await _factory.CreateAuthenticatedClient().GetFromJsonAsync<CourseGroup>("/api/coursegroups/2");
 
         Assert.Equal(2, group!.Pkid);
         Assert.Equal("進階課程", group.Description);
@@ -75,7 +75,7 @@ public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task GetById_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().GetAsync("/api/coursegroups/99");
+        var response = await _factory.CreateAuthenticatedClient().GetAsync("/api/coursegroups/99");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -83,7 +83,7 @@ public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task GetById_NonNumeric_Returns404()
     {
-        var response = await _factory.CreateClient().GetAsync("/api/coursegroups/abc");
+        var response = await _factory.CreateAuthenticatedClient().GetAsync("/api/coursegroups/abc");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -93,7 +93,7 @@ public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task Create_ValidRequest_Returns201WithGeneratedPkid()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.PostAsJsonAsync("/api/coursegroups", NewRequest());
 
@@ -111,7 +111,7 @@ public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>
         var request = NewRequest();
         request.Description = "  線上課程  ";
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/coursegroups", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/coursegroups", request);
 
         response.EnsureSuccessStatusCode();
         var created = await response.Content.ReadFromJsonAsync<CourseGroup>();
@@ -124,7 +124,7 @@ public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>
         var request = NewRequest();
         request.Description = "";
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/coursegroups", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/coursegroups", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -135,7 +135,7 @@ public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>
         var request = NewRequest();
         request.Description = new string('x', 101);
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/coursegroups", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/coursegroups", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -145,7 +145,7 @@ public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task Update_Existing_ChangesDescription()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
         var request = NewRequest(2);
         request.Description = "進階實務課程";
 
@@ -159,7 +159,7 @@ public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task Update_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().PutAsJsonAsync("/api/coursegroups", NewRequest(99));
+        var response = await _factory.CreateAuthenticatedClient().PutAsJsonAsync("/api/coursegroups", NewRequest(99));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -169,7 +169,7 @@ public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task Delete_Existing_Returns204ThenGone()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.DeleteAsync("/api/coursegroups/3");
 
@@ -180,7 +180,7 @@ public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task Delete_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().DeleteAsync("/api/coursegroups/99");
+        var response = await _factory.CreateAuthenticatedClient().DeleteAsync("/api/coursegroups/99");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -190,7 +190,7 @@ public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>
     {
         // FK_Course_CourseGroup is ON DELETE CASCADE, so the API must refuse before deleting.
         _repository.InUsePkids.Add(1);
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.DeleteAsync("/api/coursegroups/1");
 
@@ -203,7 +203,7 @@ public class CourseGroupsApiTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task Lookups_CourseGroups_ReturnsSlimListInPkidOrder()
     {
-        var lookups = await _factory.CreateClient()
+        var lookups = await _factory.CreateAuthenticatedClient()
             .GetFromJsonAsync<List<CourseGroupLookup>>("/api/lookups/coursegroups");
 
         Assert.Equal(["基礎課程", "進階課程", "認證課程"], lookups!.Select(l => l.Description));

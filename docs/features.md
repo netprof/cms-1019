@@ -91,3 +91,24 @@ Read-only report page `/token-usages` (hand-written, not `/crud`): filter bar, s
 - `tokenIn` = input + both cache writes + cache read (computed by the API, on rows and totals). `cost` is `SUM(Cost)`, which ignores unpriced rows and is `NULL` only when nothing in the group (or the whole set) is priced; the page shows `NULL` as blank.
 - The page's date range defaults to the 1st of this month through today in Taipei dates (`taipeiToday()` in `core/utils/date.util.ts`, whatever the browser's time zone); 清除 restores that. Filters/sort/page persist in `tokenusage-report-filters` / `-sort` / `-page`, but the date range is saved only when it differs from the default, so an untouched default follows today across midnight.
 - Report SQL verified against the real `CMS` DB (aggregation across sessions, NULL-ignoring cost sum, inclusive range, contains filters, empty result). Spec: `spec/admin/token-usage-report.md`.
+
+## Login (`auth.sql`)
+
+`POST /api/auth/login` (`AuthController`, anonymous) takes `{ userId, password }` and returns `{ userId, userName, accessToken }`. The Angular login page and how the token is used are under Authorization below.
+
+- Checks: `AppUser.UserId` matches exactly (fetched by the CI collation, then compared `Ordinal` in C#, so `ADMIN` ≠ `admin`), `IsActive = 1`, and `PasswordHash` equals `PasswordHasher.Sha256Hex(password)` (constant-time compare). Every failure, including an empty field, is the same `401 { "message": "invalid credentials" }`.
+- Token: HS256 JWT built by `Services/JwtTokenService` (`Microsoft.IdentityModel.JsonWebTokens`), signed with SysConfig `appConfig.symmetricSecurityKey` read on every login (`IAuthRepository.GetJwtSigningKeyAsync`; missing → 500). Claims: `sub` = UserId, `name` = UserName, `role` = every `AppUserRole.RoleId` (always a JSON array). `iat`/`nbf` = now via `TimeProvider`, `exp` = now + 24h. No `iss`/`aud`.
+- `PasswordHash` is read only into the internal `LoginCredential` model; `LoginResponse` has no such field.
+- Verified against the real `CMS` DB (valid login, wrong password, unknown user, case mismatch).
+
+## Authorization (JWT, end to end)
+
+Every API endpoint requires `Authorization: Bearer <token from /api/auth/login>` except `POST /api/auth/login` and the token usage ingest (`POST /api/tokenusages`, which the SessionEnd hook calls with its `X-Api-Key` and no JWT). No role-based restrictions on the API yet: any valid token reaches every endpoint.
+
+- Backend: `AddJwtBearer` + `app.MapControllers().RequireAuthorization()`; anonymous actions carry `[AllowAnonymous]`. Validation: HS256 signature and lifetime only (no `iss`/`aud`), `MapInboundClaims = false`, so `User` sees `sub`, `name` and `role` as issued. No token, a bad signature, an expired token or another scheme → 401 with `WWW-Authenticate: Bearer`.
+- Validation key: `Services/SysConfigSigningKeyManager` is the bearer handler's `ConfigurationManager` (the async hook for signing keys). It reads SysConfig `appConfig.symmetricSecurityKey` through `IAuthRepository` (the same key `JwtTokenService` signs with), caches it 5 minutes, and re-reads at once when a token's key is not found, so a rotated key takes effect on the next request. A missing key is logged as a warning and every token gets 401, not 500.
+- `AuthorizationApiTests.EveryAction_RequiresAuthorization_ExceptLoginAndTokenUsageIngest` lists the anonymous actions; update it when adding a public endpoint on purpose. Swagger UI has an Authorize button (bearer scheme).
+- Frontend: `/login` page (`features/auth/login`) is the only public route; everything else is a child of `{ path: '', canActivateChild: [authGuard] }`, which sends visitors without a token to `/login?returnUrl=…` (same-app paths only). `core/auth/AuthService` stores the login response as JSON in **session storage** key `cms-auth` and reads the `role` claim(s) from the token payload (no API call). `authInterceptor` adds the Bearer header to requests under `environment.apiBaseUrl`; a 401 from any API call other than login runs `logout(currentUrl)`.
+- Logout (and a 401) clears **all** session storage, saved list filters included, then goes to `/login`. The shell (sidebar + header with UserName and 登出) renders only while signed in.
+- Sidebar: the `系統管理 Admin` group has `adminOnly: true` and shows only when the roles include `Admin` (exact case). Hiding the menu is not access control: a non-admin can still open admin URLs, and the default route `/` still redirects to `/app-roles`.
+- Verified against the real `CMS` DB: no token / garbage token → 401, login token → 200 on `/api/approles` and `/api/courses`, ingest still answered by its API-key filter.

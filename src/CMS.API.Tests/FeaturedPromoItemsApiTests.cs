@@ -8,12 +8,12 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CMS.API.Tests;
 
-public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Program>>
+public class FeaturedPromoItemsApiTests : IClassFixture<ApiTestFactory>
 {
     private readonly WebApplicationFactory<Program> _factory;
     private readonly FakeFeaturedPromoItemRepository _repository = new();
 
-    public FeaturedPromoItemsApiTests(WebApplicationFactory<Program> factory)
+    public FeaturedPromoItemsApiTests(ApiTestFactory factory)
     {
         // Each test class instance gets its own fake repository (fresh data).
         _factory = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
@@ -46,7 +46,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task GetAll_ReturnsItemsOrderedByDateCenterSlotWithPromoCode()
     {
-        var items = await _factory.CreateClient().GetFromJsonAsync<List<FeaturedPromoItem>>("/api/featuredpromoitems");
+        var items = await _factory.CreateAuthenticatedClient().GetFromJsonAsync<List<FeaturedPromoItem>>("/api/featuredpromoitems");
 
         Assert.Equal([1, 3, 2, 6, 4, 5], items!.Select(f => f.Pkid));
         Assert.Equal("20251204_SkillTrainAI", items[1].Promotion.PromoCode);
@@ -59,7 +59,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [InlineData(2026, 3, 22)] // Sunday
     public async Task Query_WeekOf_ReturnsMondayToSundayOnly(int y, int m, int d)
     {
-        var items = await QueryAsync(_factory.CreateClient(), new FeaturedPromoItemQuery { WeekOf = new DateOnly(y, m, d) });
+        var items = await QueryAsync(_factory.CreateAuthenticatedClient(), new FeaturedPromoItemQuery { WeekOf = new DateOnly(y, m, d) });
 
         // Excludes Sun 3/15 (item 1) and Mon 3/23 (item 5).
         Assert.Equal([3, 2, 6, 4], items.Select(f => f.Pkid));
@@ -70,7 +70,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Query_WeekOf_OverridesExplicitRange()
     {
-        var items = await QueryAsync(_factory.CreateClient(), new FeaturedPromoItemQuery
+        var items = await QueryAsync(_factory.CreateAuthenticatedClient(), new FeaturedPromoItemQuery
         {
             WeekOf = new DateOnly(2026, 3, 23),
             ScheduleOnFrom = new DateOnly(2026, 1, 1),
@@ -83,7 +83,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Query_ByTrainingCenter_Filters()
     {
-        var items = await QueryAsync(_factory.CreateClient(), new FeaturedPromoItemQuery { TrainingCenterPkid = 2 });
+        var items = await QueryAsync(_factory.CreateAuthenticatedClient(), new FeaturedPromoItemQuery { TrainingCenterPkid = 2 });
 
         Assert.Equal([6], items.Select(f => f.Pkid));
     }
@@ -91,7 +91,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Query_ByTrainingCenterAndWeek_Combines()
     {
-        var items = await QueryAsync(_factory.CreateClient(), new FeaturedPromoItemQuery
+        var items = await QueryAsync(_factory.CreateAuthenticatedClient(), new FeaturedPromoItemQuery
         {
             TrainingCenterPkid = 1,
             WeekOf = new DateOnly(2026, 3, 19),
@@ -104,7 +104,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Query_ByScheduleOnRange_IsInclusive()
     {
-        var items = await QueryAsync(_factory.CreateClient(), new FeaturedPromoItemQuery
+        var items = await QueryAsync(_factory.CreateAuthenticatedClient(), new FeaturedPromoItemQuery
         {
             ScheduleOnFrom = new DateOnly(2026, 3, 15),
             ScheduleOnTo = new DateOnly(2026, 3, 16),
@@ -116,7 +116,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Query_RangeReversed_Returns400()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/featuredpromoitems/query", new FeaturedPromoItemQuery
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/featuredpromoitems/query", new FeaturedPromoItemQuery
         {
             ScheduleOnFrom = new DateOnly(2026, 3, 22),
             ScheduleOnTo = new DateOnly(2026, 3, 16),
@@ -128,7 +128,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Query_EmptyFilter_ReturnsAll()
     {
-        var items = await QueryAsync(_factory.CreateClient(), new FeaturedPromoItemQuery());
+        var items = await QueryAsync(_factory.CreateAuthenticatedClient(), new FeaturedPromoItemQuery());
 
         Assert.Equal(6, items.Count);
     }
@@ -138,7 +138,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task GetById_Existing_ReturnsItemWithPromotion()
     {
-        var item = await _factory.CreateClient().GetFromJsonAsync<FeaturedPromoItem>("/api/featuredpromoitems/2");
+        var item = await _factory.CreateAuthenticatedClient().GetFromJsonAsync<FeaturedPromoItem>("/api/featuredpromoitems/2");
 
         Assert.Equal(new DateOnly(2026, 3, 16), item!.ScheduleOn);
         Assert.Equal(2, item.Slot);
@@ -150,7 +150,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task GetById_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().GetAsync("/api/featuredpromoitems/99");
+        var response = await _factory.CreateAuthenticatedClient().GetAsync("/api/featuredpromoitems/99");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -160,7 +160,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Create_ValidRequest_Returns201()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.PostAsJsonAsync("/api/featuredpromoitems", NewRequest());
 
@@ -180,7 +180,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
         request.Topic = "  AI  ";
         request.Description = " 說明 ";
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/featuredpromoitems", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/featuredpromoitems", request);
 
         response.EnsureSuccessStatusCode();
         var created = await response.Content.ReadFromJsonAsync<FeaturedPromoItem>();
@@ -195,7 +195,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
         request.ScheduleOn = new DateOnly(2026, 3, 16);
         request.Slot = 2;
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/featuredpromoitems", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/featuredpromoitems", request);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
@@ -208,7 +208,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
         request.Slot = 2;
         request.TrainingCenterPkid = 2;
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/featuredpromoitems", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/featuredpromoitems", request);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }
@@ -221,7 +221,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
         var request = NewRequest();
         request.Slot = slot;
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/featuredpromoitems", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/featuredpromoitems", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -232,7 +232,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
         var request = NewRequest();
         request.PromotionPkid = 0;
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/featuredpromoitems", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/featuredpromoitems", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -243,7 +243,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
         var request = NewRequest();
         request.TrainingCenterPkid = 0;
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/featuredpromoitems", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/featuredpromoitems", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -254,7 +254,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
         var request = NewRequest();
         request.Topic = "   ";
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/featuredpromoitems", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/featuredpromoitems", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -265,7 +265,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
         var request = NewRequest();
         request.Description = new string('x', 301);
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/featuredpromoitems", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/featuredpromoitems", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -275,7 +275,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Update_Existing_ChangesPromotionAndText()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
         var request = NewRequest(2);
         request.ScheduleOn = new DateOnly(2026, 3, 16);
         request.Slot = 2;
@@ -297,7 +297,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
         request.ScheduleOn = new DateOnly(2026, 3, 16);
         request.Slot = 1; // held by item 3
 
-        var response = await _factory.CreateClient().PutAsJsonAsync("/api/featuredpromoitems", request);
+        var response = await _factory.CreateAuthenticatedClient().PutAsJsonAsync("/api/featuredpromoitems", request);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
@@ -305,7 +305,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Update_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().PutAsJsonAsync("/api/featuredpromoitems", NewRequest(99));
+        var response = await _factory.CreateAuthenticatedClient().PutAsJsonAsync("/api/featuredpromoitems", NewRequest(99));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -315,7 +315,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task MoveDown_SwapsWithNextSlot()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.PostAsync("/api/featuredpromoitems/3/move-down", null);
 
@@ -327,7 +327,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task MoveUp_SwapsWithPreviousSlot()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.PostAsync("/api/featuredpromoitems/2/move-up", null);
 
@@ -339,7 +339,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task MoveDown_IntoEmptySlot_JustMoves()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.PostAsync("/api/featuredpromoitems/6/move-down", null);
 
@@ -350,7 +350,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task MoveUp_FromFirstSlot_Returns400()
     {
-        var response = await _factory.CreateClient().PostAsync("/api/featuredpromoitems/3/move-up", null);
+        var response = await _factory.CreateAuthenticatedClient().PostAsync("/api/featuredpromoitems/3/move-up", null);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -358,7 +358,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task MoveDown_FromLastSlot_Returns400()
     {
-        var response = await _factory.CreateClient().PostAsync("/api/featuredpromoitems/4/move-down", null);
+        var response = await _factory.CreateAuthenticatedClient().PostAsync("/api/featuredpromoitems/4/move-down", null);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -366,7 +366,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Move_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().PostAsync("/api/featuredpromoitems/99/move-down", null);
+        var response = await _factory.CreateAuthenticatedClient().PostAsync("/api/featuredpromoitems/99/move-down", null);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -376,7 +376,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Delete_Existing_Returns204ThenGone()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.DeleteAsync("/api/featuredpromoitems/4");
 
@@ -387,7 +387,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Delete_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().DeleteAsync("/api/featuredpromoitems/99");
+        var response = await _factory.CreateAuthenticatedClient().DeleteAsync("/api/featuredpromoitems/99");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -397,7 +397,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Lookups_Promotions_FiltersByPromoCodeContains()
     {
-        var lookups = await _factory.CreateClient()
+        var lookups = await _factory.CreateAuthenticatedClient()
             .GetFromJsonAsync<List<PromotionLookup>>("/api/lookups/promotions?keyword=googleai");
 
         var promo = Assert.Single(lookups!);
@@ -410,12 +410,12 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Lookups_Promotions_PartialCodeMatchesSeveralNewestFirst()
     {
-        var lookups = await _factory.CreateClient()
+        var lookups = await _factory.CreateAuthenticatedClient()
             .GetFromJsonAsync<List<PromotionLookup>>("/api/lookups/promotions?keyword=2025120");
 
         Assert.Equal([10], lookups!.Select(p => p.Pkid));
 
-        lookups = await _factory.CreateClient()
+        lookups = await _factory.CreateAuthenticatedClient()
             .GetFromJsonAsync<List<PromotionLookup>>("/api/lookups/promotions?keyword=2512");
 
         Assert.Equal([12, 11, 10], lookups!.Select(p => p.Pkid));
@@ -424,7 +424,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Lookups_Promotions_NoKeyword_ReturnsNewestFirst()
     {
-        var lookups = await _factory.CreateClient()
+        var lookups = await _factory.CreateAuthenticatedClient()
             .GetFromJsonAsync<List<PromotionLookup>>("/api/lookups/promotions");
 
         Assert.Equal([12, 11, 10], lookups!.Select(p => p.Pkid));
@@ -433,7 +433,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Lookups_Promotions_NoMatch_ReturnsEmpty()
     {
-        var lookups = await _factory.CreateClient()
+        var lookups = await _factory.CreateAuthenticatedClient()
             .GetFromJsonAsync<List<PromotionLookup>>("/api/lookups/promotions?keyword=nothing");
 
         Assert.Empty(lookups!);
@@ -442,7 +442,7 @@ public class FeaturedPromoItemsApiTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task Lookups_TrainingCenters_ReturnsSlimList()
     {
-        var lookups = await _factory.CreateClient()
+        var lookups = await _factory.CreateAuthenticatedClient()
             .GetFromJsonAsync<List<TrainingCenterLookup>>("/api/lookups/trainingcenters");
 
         Assert.Equal(["新竹", "台北"], lookups!.Select(t => t.Name));

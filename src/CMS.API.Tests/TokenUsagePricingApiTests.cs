@@ -13,12 +13,12 @@ namespace CMS.API.Tests;
 /// Fake prices (USD per million): claude-opus-5-5 from 2026-01-01 = 4 / 5 / 8 / 0.2 / 20,
 /// from 2026-06-01 = 3 / 3.75 / 6 / 0.15 / 15; claude-haiku-5-5 from 2026-01-01.
 /// </summary>
-public class TokenUsagePricingApiTests : IClassFixture<WebApplicationFactory<Program>>
+public class TokenUsagePricingApiTests : IClassFixture<ApiTestFactory>
 {
     private readonly WebApplicationFactory<Program> _factory;
     private readonly FakeTokenUsageRepository _usages = new();
 
-    public TokenUsagePricingApiTests(WebApplicationFactory<Program> factory)
+    public TokenUsagePricingApiTests(ApiTestFactory factory)
     {
         _factory = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
         {
@@ -52,7 +52,7 @@ public class TokenUsagePricingApiTests : IClassFixture<WebApplicationFactory<Pro
             Content = JsonContent.Create(new { sessionId, userId = "helen", project = "netprof/cms", rows }),
         };
         request.Headers.Add("X-Api-Key", FakeIngestApiKeyReader.ApiKey);
-        var response = await _factory.CreateClient().SendAsync(request);
+        var response = await _factory.CreateAuthenticatedClient().SendAsync(request);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
@@ -114,7 +114,7 @@ public class TokenUsagePricingApiTests : IClassFixture<WebApplicationFactory<Pro
         await IngestAsync("s-2", Row("2026-10-02"));
         var haikuBefore = CostOf("2026-10-20", "claude-haiku-5-5");
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/modelprices", Price("claude-opus-5-5", "2026-10-01", 1m));
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/modelprices", Price("claude-opus-5-5", "2026-10-01", 1m));
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Equal(JanuaryOpusCost, CostOf("2026-05-31"));
@@ -129,7 +129,7 @@ public class TokenUsagePricingApiTests : IClassFixture<WebApplicationFactory<Pro
     {
         await IngestAsync("s-1", Row("2026-10-20", "claude-new"));
 
-        await _factory.CreateClient().PostAsJsonAsync("/api/modelprices", Price("claude-new", "2026-10-01", 2m));
+        await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/modelprices", Price("claude-new", "2026-10-01", 2m));
 
         Assert.Equal(2m * TokensInMillions, CostOf("2026-10-20", "claude-new"));
     }
@@ -139,7 +139,7 @@ public class TokenUsagePricingApiTests : IClassFixture<WebApplicationFactory<Pro
     {
         await IngestAsync("s-1", Row("2026-05-31"), Row("2026-06-01"));
 
-        var response = await _factory.CreateClient().PutAsJsonAsync("/api/modelprices", Price("claude-opus-5-5", "2026-06-01", 2m));
+        var response = await _factory.CreateAuthenticatedClient().PutAsJsonAsync("/api/modelprices", Price("claude-opus-5-5", "2026-06-01", 2m));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(JanuaryOpusCost, CostOf("2026-05-31"));
@@ -151,7 +151,7 @@ public class TokenUsagePricingApiTests : IClassFixture<WebApplicationFactory<Pro
     {
         await IngestAsync("s-1", Row("2026-06-01"));
 
-        var response = await _factory.CreateClient().DeleteAsync("/api/modelprices/claude-opus-5-5/2026-06-01");
+        var response = await _factory.CreateAuthenticatedClient().DeleteAsync("/api/modelprices/claude-opus-5-5/2026-06-01");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Assert.Equal(JanuaryOpusCost, CostOf("2026-06-01"));
@@ -162,7 +162,7 @@ public class TokenUsagePricingApiTests : IClassFixture<WebApplicationFactory<Pro
     {
         await IngestAsync("s-1", Row("2026-10-20", "claude-haiku-5-5"));
 
-        var response = await _factory.CreateClient().DeleteAsync("/api/modelprices/claude-haiku-5-5/2026-01-01");
+        var response = await _factory.CreateAuthenticatedClient().DeleteAsync("/api/modelprices/claude-haiku-5-5/2026-01-01");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Assert.Null(CostOf("2026-10-20", "claude-haiku-5-5"));
@@ -172,7 +172,7 @@ public class TokenUsagePricingApiTests : IClassFixture<WebApplicationFactory<Pro
 
     private async Task<ModelPrice?> GetPriceAsync(string model, string date)
     {
-        var response = await _factory.CreateClient().GetAsync($"/api/modelprices/{model}/{date}");
+        var response = await _factory.CreateAuthenticatedClient().GetAsync($"/api/modelprices/{model}/{date}");
         return response.StatusCode == HttpStatusCode.NotFound ? null : await response.Content.ReadFromJsonAsync<ModelPrice>();
     }
 
@@ -182,7 +182,7 @@ public class TokenUsagePricingApiTests : IClassFixture<WebApplicationFactory<Pro
         await IngestAsync("s-1", Row("2026-10-20"));
         _usages.FailCostUpdates = true;
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/modelprices", Price("claude-opus-5-5", "2026-10-01", 1m));
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/modelprices", Price("claude-opus-5-5", "2026-10-01", 1m));
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.Null(await GetPriceAsync("claude-opus-5-5", "2026-10-01"));
@@ -194,7 +194,7 @@ public class TokenUsagePricingApiTests : IClassFixture<WebApplicationFactory<Pro
         await IngestAsync("s-1", Row("2026-06-01"));
         _usages.FailCostUpdates = true;
 
-        var response = await _factory.CreateClient().PutAsJsonAsync("/api/modelprices", Price("claude-opus-5-5", "2026-06-01", 2m));
+        var response = await _factory.CreateAuthenticatedClient().PutAsJsonAsync("/api/modelprices", Price("claude-opus-5-5", "2026-06-01", 2m));
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.Equal(3m, (await GetPriceAsync("claude-opus-5-5", "2026-06-01"))!.InputPrice);
@@ -206,7 +206,7 @@ public class TokenUsagePricingApiTests : IClassFixture<WebApplicationFactory<Pro
         await IngestAsync("s-1", Row("2026-06-01"));
         _usages.FailCostUpdates = true;
 
-        var response = await _factory.CreateClient().DeleteAsync("/api/modelprices/claude-opus-5-5/2026-06-01");
+        var response = await _factory.CreateAuthenticatedClient().DeleteAsync("/api/modelprices/claude-opus-5-5/2026-06-01");
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.NotNull(await GetPriceAsync("claude-opus-5-5", "2026-06-01"));

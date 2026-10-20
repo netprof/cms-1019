@@ -8,11 +8,11 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CMS.API.Tests;
 
-public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Program>>
+public class PublishStatusesApiTests : IClassFixture<ApiTestFactory>
 {
     private readonly WebApplicationFactory<Program> _factory;
 
-    public PublishStatusesApiTests(WebApplicationFactory<Program> factory)
+    public PublishStatusesApiTests(ApiTestFactory factory)
     {
         // Each test class instance gets its own fake repository (fresh data).
         _factory = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
@@ -32,7 +32,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task GetAll_ReturnsAllStatusesOrderedByPkid()
     {
-        var statuses = await _factory.CreateClient().GetFromJsonAsync<List<PublishStatus>>("/api/publishstatuses");
+        var statuses = await _factory.CreateAuthenticatedClient().GetFromJsonAsync<List<PublishStatus>>("/api/publishstatuses");
 
         Assert.NotNull(statuses);
         Assert.Equal([1, 2, 3], statuses.Select(s => (int)s.Pkid));
@@ -42,7 +42,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task Query_ByKeyword_FiltersStatuses()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/publishstatuses/query",
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/publishstatuses/query",
             new PublishStatusQuery { Keyword = "停用" });
 
         response.EnsureSuccessStatusCode();
@@ -53,7 +53,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task Query_ByIsPublished_FiltersStatuses()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/publishstatuses/query",
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/publishstatuses/query",
             new PublishStatusQuery { IsPublished = true });
 
         var statuses = await response.Content.ReadFromJsonAsync<List<PublishStatus>>();
@@ -63,7 +63,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task Query_ByIsDraftFalse_FiltersStatuses()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/publishstatuses/query",
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/publishstatuses/query",
             new PublishStatusQuery { IsDraft = false });
 
         var statuses = await response.Content.ReadFromJsonAsync<List<PublishStatus>>();
@@ -73,7 +73,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task Query_EmptyFilter_ReturnsAll()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/publishstatuses/query", new PublishStatusQuery());
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/publishstatuses/query", new PublishStatusQuery());
 
         var statuses = await response.Content.ReadFromJsonAsync<List<PublishStatus>>();
         Assert.Equal(3, statuses!.Count);
@@ -84,7 +84,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task GetById_Existing_ReturnsStatus()
     {
-        var status = await _factory.CreateClient().GetFromJsonAsync<PublishStatus>("/api/publishstatuses/2");
+        var status = await _factory.CreateAuthenticatedClient().GetFromJsonAsync<PublishStatus>("/api/publishstatuses/2");
 
         Assert.Equal("已發布", status!.Description);
         Assert.True(status.IsPublished);
@@ -94,7 +94,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task GetById_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().GetAsync("/api/publishstatuses/99");
+        var response = await _factory.CreateAuthenticatedClient().GetAsync("/api/publishstatuses/99");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -102,7 +102,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task GetById_NonNumeric_Returns404()
     {
-        var response = await _factory.CreateClient().GetAsync("/api/publishstatuses/abc");
+        var response = await _factory.CreateAuthenticatedClient().GetAsync("/api/publishstatuses/abc");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -112,7 +112,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task Create_ValidRequest_Returns201AndPersists()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.PostAsJsonAsync("/api/publishstatuses", NewRequest());
 
@@ -126,7 +126,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task Create_DuplicatePkid_Returns409()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/publishstatuses", NewRequest(1));
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/publishstatuses", NewRequest(1));
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
@@ -137,7 +137,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
         var request = NewRequest();
         request.Description = "";
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/publishstatuses", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/publishstatuses", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -148,7 +148,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
         var request = NewRequest();
         request.Description = new string('x', 51);
 
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/publishstatuses", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/publishstatuses", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -156,7 +156,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task Create_PkidOutOfTinyintRange_Returns400()
     {
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/publishstatuses",
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/publishstatuses",
             new { pkid = 300, description = "x", isDraft = false, isPublished = false, isDiscontinued = false });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -167,7 +167,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task Update_Existing_ChangesFields()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
         var request = NewRequest(2);
         request.Description = "公開";
         request.IsPublished = true;
@@ -185,7 +185,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task Update_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().PutAsJsonAsync("/api/publishstatuses", NewRequest(99));
+        var response = await _factory.CreateAuthenticatedClient().PutAsJsonAsync("/api/publishstatuses", NewRequest(99));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -195,7 +195,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task Delete_Existing_Returns204ThenGone()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.DeleteAsync("/api/publishstatuses/3");
 
@@ -206,7 +206,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task Delete_Missing_Returns404()
     {
-        var response = await _factory.CreateClient().DeleteAsync("/api/publishstatuses/99");
+        var response = await _factory.CreateAuthenticatedClient().DeleteAsync("/api/publishstatuses/99");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -216,7 +216,7 @@ public class PublishStatusesApiTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task Lookups_PublishStatuses_ReturnsSlimList()
     {
-        var lookups = await _factory.CreateClient()
+        var lookups = await _factory.CreateAuthenticatedClient()
             .GetFromJsonAsync<List<PublishStatusLookup>>("/api/lookups/publishstatuses");
 
         Assert.Equal(["草稿", "已發布", "已停用"], lookups!.Select(l => l.Description));

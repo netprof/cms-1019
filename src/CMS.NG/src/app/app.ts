@@ -1,5 +1,6 @@
-import { Component, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { AuthService } from './core/auth/auth.service';
 
 interface NavItem {
   label: string;
@@ -10,6 +11,8 @@ interface NavItem {
 interface NavGroup {
   label: string;
   icon: string;
+  /** Shown only when the token's roles include "Admin". */
+  adminOnly?: boolean;
   items: NavItem[];
 }
 
@@ -20,12 +23,14 @@ interface NavGroup {
   styleUrl: './app.scss',
 })
 export class App {
+  readonly auth = inject(AuthService);
   readonly collapsed = signal(false);
 
   readonly navGroups: NavGroup[] = [
     {
       label: '系統管理 Admin',
       icon: 'pi-shield',
+      adminOnly: true,
       items: [
         { label: '使用者 AppUser', icon: 'pi-user', route: '/app-users' },
         { label: '角色 AppRole', icon: 'pi-id-card', route: '/app-roles' },
@@ -51,6 +56,10 @@ export class App {
       ],
     },
   ];
+
+  readonly visibleNavGroups = computed(() =>
+    this.navGroups.filter((g) => !g.adminOnly || this.auth.isAdmin()),
+  );
 
   readonly openGroups = signal<Set<string>>(new Set(this.navGroups.map((g) => g.label)));
 

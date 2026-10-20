@@ -1,13 +1,86 @@
+import { provideHttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { App } from './app';
+import { signIn } from './core/testing/auth';
 
 describe('App', () => {
   beforeEach(async () => {
+    // Signed in as an Admin unless a test says otherwise; AuthService reads storage when created.
+    sessionStorage.clear();
+    signIn(['Admin']);
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideRouter([])],
+      providers: [provideRouter([]), provideHttpClient()],
     }).compileComponents();
+  });
+
+  afterEach(() => sessionStorage.clear());
+
+  const groupLabels = (el: HTMLElement) =>
+    Array.from(el.querySelectorAll('.nav-group')).map((g) => g.textContent?.trim());
+
+  it('shows the 系統管理 Admin group when the roles include Admin', () => {
+    sessionStorage.clear();
+    signIn(['User', 'Admin']);
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    expect(groupLabels(fixture.nativeElement)).toContain('系統管理 Admin');
+  });
+
+  it('hides the 系統管理 Admin group and its links for users without the Admin role', () => {
+    sessionStorage.clear();
+    signIn(['User']);
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(groupLabels(el)).not.toContain('系統管理 Admin');
+    expect(groupLabels(el)).toContain('課程管理 Course');
+    expect(el.querySelector('a[href="/app-users"]')).toBeNull();
+  });
+
+  it('hides the 系統管理 Admin group for a role that differs only in case', () => {
+    sessionStorage.clear();
+    signIn(['admin']);
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    expect(groupLabels(fixture.nativeElement)).not.toContain('系統管理 Admin');
+  });
+
+  it('shows the signed-in UserName in the header', () => {
+    sessionStorage.clear();
+    signIn(['Admin'], '王小明');
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('#signed-in-user')?.textContent).toContain('王小明');
+  });
+
+  it('logs out: clears session storage and returns to the login page', () => {
+    sessionStorage.setItem('course-filters', '{}');
+    const fixture = TestBed.createComponent(App);
+    const navigate = spyOn(TestBed.inject(Router), 'navigate').and.resolveTo(true);
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('#logout-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(sessionStorage.length).toBe(0);
+    expect(navigate).toHaveBeenCalledWith(['/login'], { queryParams: {} });
+    expect((fixture.nativeElement as HTMLElement).querySelector('.sidebar')).toBeNull();
+  });
+
+  it('renders no shell when signed out', () => {
+    sessionStorage.clear();
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('.sidebar')).toBeNull();
+    expect(el.querySelector('router-outlet')).not.toBeNull();
   });
 
   it('should create the app', () => {

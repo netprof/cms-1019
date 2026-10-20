@@ -2,6 +2,7 @@ using CMS.API.Data;
 using CMS.API.Models;
 using CMS.API.Repositories;
 using CMS.API.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CMS.API.Controllers;
@@ -13,7 +14,9 @@ public class TokenUsagesController(
     TimeProvider timeProvider) : ControllerBase
 {
     /// <summary>Ingests one session's usage, replacing whatever was stored for it.</summary>
+    /// <remarks>Called by the SessionEnd hook, which has no JWT: the API key stands in for bearer auth.</remarks>
     [HttpPost]
+    [AllowAnonymous]
     [RequireIngestApiKey]
     public async Task<IActionResult> Ingest(TokenUsageIngestRequest request)
     {
