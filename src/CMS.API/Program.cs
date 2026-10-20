@@ -1,5 +1,6 @@
 using CMS.API.Data;
 using CMS.API.Repositories;
+using CMS.API.Services;
 using Dapper;
 
 SqlMapper.AddTypeHandler(new DateOnlyTypeHandler());
@@ -22,6 +23,7 @@ builder.Services.AddScoped<IFeaturedPromoItemRepository, FeaturedPromoItemReposi
 builder.Services.AddScoped<IModelPriceRepository, ModelPriceRepository>();
 builder.Services.AddScoped<ITokenUsageRepository, TokenUsageRepository>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<TokenCostService>();
 
 builder.Services.AddCors(options =>
 {

@@ -15,4 +15,10 @@ public interface ITokenUsageRepository
     /// In one transaction, deletes every row of <paramref name="sessionId"/> and inserts <paramref name="rows"/>.
     /// </summary>
     Task ReplaceSessionAsync(string sessionId, IReadOnlyList<TokenUsage> rows);
+
+    /// <summary>Every row for <paramref name="model"/> (all sessions and dates), for cost recompute.</summary>
+    Task<IEnumerable<TokenUsage>> GetByModelAsync(string model);
+
+    /// <summary>Writes each row's <c>Cost</c> back by its key (SessionId, UsageDate, Model), in one transaction.</summary>
+    Task UpdateCostsAsync(IReadOnlyList<TokenUsage> rows);
 }

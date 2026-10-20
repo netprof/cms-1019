@@ -26,4 +26,25 @@ public class FakeTokenUsageRepository : ITokenUsageRepository
         _rows.AddRange(rows);
         return Task.CompletedTask;
     }
+
+    public Task<IEnumerable<TokenUsage>> GetByModelAsync(string model) =>
+        Task.FromResult<IEnumerable<TokenUsage>>(_rows
+            .Where(r => string.Equals(r.Model, model, StringComparison.OrdinalIgnoreCase))
+            .Select(Clone).ToList());
+
+    public Task UpdateCostsAsync(IReadOnlyList<TokenUsage> rows)
+    {
+        foreach (var row in rows)
+            _rows.Single(r => r.SessionId == row.SessionId && r.UsageDate == row.UsageDate
+                && string.Equals(r.Model, row.Model, StringComparison.OrdinalIgnoreCase)).Cost = row.Cost;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Copies, like a database read, so callers cannot change stored rows without UpdateCostsAsync.</summary>
+    private static TokenUsage Clone(TokenUsage r) => new()
+    {
+        SessionId = r.SessionId, UsageDate = r.UsageDate, Model = r.Model, UserId = r.UserId, Project = r.Project,
+        InputTokens = r.InputTokens, CacheWrite5mTokens = r.CacheWrite5mTokens, CacheWrite1hTokens = r.CacheWrite1hTokens,
+        CacheReadTokens = r.CacheReadTokens, OutputTokens = r.OutputTokens, Cost = r.Cost, UpdatedTime = r.UpdatedTime,
+    };
 }

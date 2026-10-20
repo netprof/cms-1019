@@ -19,6 +19,8 @@ public class ModelPricesApiTests : IClassFixture<WebApplicationFactory<Program>>
         {
             services.RemoveAll<IModelPriceRepository>();
             services.AddSingleton<IModelPriceRepository>(new FakeModelPriceRepository());
+            services.RemoveAll<ITokenUsageRepository>(); // price changes recompute usage costs
+            services.AddSingleton<ITokenUsageRepository>(new FakeTokenUsageRepository());
         }));
     }
 

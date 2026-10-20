@@ -1,5 +1,6 @@
 using CMS.API.Models;
 using CMS.API.Repositories;
+using CMS.API.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 
@@ -8,10 +9,11 @@ namespace CMS.API.Controllers;
 /// <summary>
 /// Claude model price list. Composite key (Model, EffectiveDate): routes are
 /// <c>/api/modelprices/{model}/{effectiveDate:yyyy-MM-dd}</c>.
+/// Create, update and delete recompute the cost of that model's TokenUsage rows.
 /// </summary>
 [ApiController]
 [Route("api/modelprices")]
-public class ModelPricesController(IModelPriceRepository repository) : ControllerBase
+public class ModelPricesController(IModelPriceRepository repository, TokenCostService costService) : ControllerBase
 {
     /// <summary>SQL Server error number for a PRIMARY KEY violation.</summary>
     private const int PrimaryKeyViolation = 2627;
@@ -45,6 +47,7 @@ public class ModelPricesController(IModelPriceRepository repository) : Controlle
         try
         {
             var created = await repository.CreateAsync(request);
+            await costService.RecomputeModelAsync(created.Model);
             return CreatedAtAction(nameof(GetById),
                 new { model = created.Model, effectiveDate = created.EffectiveDate.ToString("yyyy-MM-dd") }, created);
         }
@@ -59,12 +62,20 @@ public class ModelPricesController(IModelPriceRepository repository) : Controlle
     {
         request.Model = request.Model.Trim();
         var updated = await repository.UpdateAsync(request);
-        return updated is null ? NotFound() : Ok(updated);
+        if (updated is null) return NotFound();
+
+        await costService.RecomputeModelAsync(updated.Model);
+        return Ok(updated);
     }
 
     [HttpDelete("{model}/{effectiveDate}")]
-    public async Task<IActionResult> Delete(string model, DateOnly effectiveDate) =>
-        await repository.DeleteAsync(model, effectiveDate) ? NoContent() : NotFound();
+    public async Task<IActionResult> Delete(string model, DateOnly effectiveDate)
+    {
+        if (!await repository.DeleteAsync(model, effectiveDate)) return NotFound();
+
+        await costService.RecomputeModelAsync(model);
+        return NoContent();
+    }
 
     private ConflictObjectResult DuplicateConflict(ModelPriceRequest request) =>
         Conflict(new ProblemDetails

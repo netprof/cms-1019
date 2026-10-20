@@ -1,12 +1,14 @@
 using CMS.API.Models;
 using CMS.API.Repositories;
+using CMS.API.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CMS.API.Controllers;
 
 [ApiController]
 [Route("api/tokenusages")]
-public class TokenUsagesController(ITokenUsageRepository repository, TimeProvider timeProvider) : ControllerBase
+public class TokenUsagesController(
+    ITokenUsageRepository repository, TokenCostService costService, TimeProvider timeProvider) : ControllerBase
 {
     /// <summary>Ingests one session's usage, replacing whatever was stored for it.</summary>
     [HttpPost]
@@ -32,10 +34,10 @@ public class TokenUsagesController(ITokenUsageRepository repository, TimeProvide
             CacheWrite1hTokens = r.CacheWrite1hTokens,
             CacheReadTokens = r.CacheReadTokens,
             OutputTokens = r.OutputTokens,
-            Cost = null, // pricing is not applied yet
             UpdatedTime = now,
         }).ToList();
 
+        await costService.PriceAsync(rows);
         await repository.ReplaceSessionAsync(request.SessionId, rows);
         return NoContent();
     }
