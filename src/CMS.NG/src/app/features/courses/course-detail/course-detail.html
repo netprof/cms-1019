@@ -13,32 +13,48 @@
 @if (course(); as c) {
   <div class="card">
     <h2>課程資料</h2>
-    <dl>
-      <dt>主代碼</dt><dd>{{ c.pkid }}</dd>
-      <dt>顯示順序</dt><dd>{{ c.displayOrder }}</dd>
-      <dt>簡介代碼</dt><dd>{{ c.courseId }}</dd>
-      <dt>科目代碼</dt><dd>{{ c.prodCourseId }}</dd>
-      <dt>課程名稱</dt><dd>{{ c.title }}</dd>
-      <dt>原廠課程名稱</dt><dd id="official-title">{{ c.officialTitle || '—' }}</dd>
-      <dt>網址別名</dt><dd>{{ c.friendlyUrl }}</dd>
-      <dt>原廠</dt><dd><a id="partner-link" [routerLink]="['/partners', c.partnerPkid]">{{ c.partner.name }}</a></dd>
-      <dt>課程群組</dt>
-      <dd id="course-group">
-        @if (c.courseGroup) {
-          <a [routerLink]="['/course-groups', c.courseGroupPkid]">{{ c.courseGroup.description }}</a>
-        } @else {
-          —
+    <div class="basic">
+      <dl>
+        <dt>主代碼</dt><dd>{{ c.pkid }}</dd>
+        <dt>顯示順序</dt><dd>{{ c.displayOrder }}</dd>
+        <dt>簡介代碼</dt><dd>{{ c.courseId }}</dd>
+        <dt>科目代碼</dt><dd>{{ c.prodCourseId }}</dd>
+        <dt>課程名稱</dt><dd>{{ c.title }}</dd>
+        <dt>原廠課程名稱</dt><dd id="official-title">{{ c.officialTitle || '—' }}</dd>
+        <dt>網址別名</dt><dd>{{ c.friendlyUrl }}</dd>
+        <dt>原廠</dt><dd><a id="partner-link" [routerLink]="['/partners', c.partnerPkid]">{{ c.partner.name }}</a></dd>
+        <dt>課程群組</dt>
+        <dd id="course-group">
+          @if (c.courseGroup) {
+            <a [routerLink]="['/course-groups', c.courseGroupPkid]">{{ c.courseGroup.description }}</a>
+          } @else {
+            —
+          }
+        </dd>
+        <dt>上架狀態</dt><dd><a id="publish-status-link" [routerLink]="['/publish-statuses', c.publishStatusPkid]">{{ c.publishStatus.description }}</a></dd>
+        <dt>上架日期</dt><dd>{{ c.scheduleOn | date: 'yyyy/MM/dd' }}</dd>
+        <dt>下架日期</dt><dd>{{ c.scheduleOff | date: 'yyyy/MM/dd' }}</dd>
+        <dt>時數</dt><dd>{{ c.hour }}</dd>
+        <dt>定價</dt><dd>{{ c.listPrice | number: '1.0-0' }}</dd>
+        <dt>點數</dt><dd>{{ c.learningCredit | number: '1.1-1' }}</dd>
+        <dt>允許重聽</dt>
+        <dd><p-tag [value]="c.canRepeat ? '是' : '否'" [severity]="c.canRepeat ? 'success' : 'secondary'" /></dd>
+      </dl>
+      <figure class="qr" id="qr-code">
+        <figcaption id="qr-title">{{ c.courseId }}</figcaption>
+        @if (qrDataUrl(); as src) {
+          <img id="qr-image" [src]="src" [alt]="'QR Code：' + qrUrl()" [title]="qrUrl()" />
+          <p-button
+            id="qr-download-button"
+            label="下載 QR Code"
+            icon="pi pi-download"
+            severity="secondary"
+            size="small"
+            (onClick)="downloadQr()"
+          />
         }
-      </dd>
-      <dt>上架狀態</dt><dd><a id="publish-status-link" [routerLink]="['/publish-statuses', c.publishStatusPkid]">{{ c.publishStatus.description }}</a></dd>
-      <dt>上架日期</dt><dd>{{ c.scheduleOn | date: 'yyyy/MM/dd' }}</dd>
-      <dt>下架日期</dt><dd>{{ c.scheduleOff | date: 'yyyy/MM/dd' }}</dd>
-      <dt>時數</dt><dd>{{ c.hour }}</dd>
-      <dt>定價</dt><dd>{{ c.listPrice | number: '1.0-0' }}</dd>
-      <dt>點數</dt><dd>{{ c.learningCredit | number: '1.1-1' }}</dd>
-      <dt>允許重聽</dt>
-      <dd><p-tag [value]="c.canRepeat ? '是' : '否'" [severity]="c.canRepeat ? 'success' : 'secondary'" /></dd>
-    </dl>
+      </figure>
+    </div>
   </div>
 
   <div class="card">

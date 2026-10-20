@@ -355,4 +355,4 @@ Same style as `PartnersApiTests`: real HTTP pipeline via `WebApplicationFactory<
 | Frontend | `src/CMS.NG/src/app/app.routes.ts` | modify — lazy routes |
 | Frontend | `src/CMS.NG/src/app/app.ts` | modify — nav entry |
 | Frontend | `src/CMS.NG/src/app/app.spec.ts` | modify — sidebar test |
-| Docs | `CLAUDE.md` | modify — Features list |
+| Docs | `docs/features.md` | modify — append feature entry |

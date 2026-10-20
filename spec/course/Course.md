@@ -476,6 +476,19 @@ On 409: 此課程已被常見問題、相關連結或熱門課程使用，無法
 
 Cards: 課程資料 (codes, title, partner/group/status as router links, schedule, hour/price/credit, canRepeat), 課程說明 (the eight long-text fields, `white-space: pre-wrap`, 「—」 when null), 對應認證 (chips), 職務類別 (chips). `forkJoin` course + certification + job-category lookups.
 
+#### QR code (課程資料 card)
+
+| Item | Value |
+|------|-------|
+| Encoded URL | `https://www.uuu.com.tw/Course/Show/{pkid}/{CourseId}`; CourseId passes through `encodeURIComponent` (`courseShowUrl()`, exported from `course-detail.ts`) |
+| Title | CourseId, shown as the `figcaption` above the image (`#qr-title`); the image `title` attribute is the full URL |
+| Placement | Right of the 課程資料 `<dl>` (`.basic` flex row, wraps below on narrow screens) |
+| Rendering | Client-side with the `qrcode` npm package: `QRCode.toDataURL(url, QR_OPTIONS)` after the course loads, stored in the `qrDataUrl` signal and bound to `<img id="qr-image">`. `QR_OPTIONS` = PNG, width 200, margin 2. No backend change |
+| Download | 下載 QR Code button (`pi pi-download`, secondary, small) → `downloadQr()`. `buildQrImage()` draws a 200 × 236 white canvas: CourseId (600 20px sans-serif, centred) in a 36 px band, QR code below. Saved as `{CourseId}.png` via a temporary `<a download>` |
+| Errors | Generation failure → toast 「產生 QR Code 失敗」; download failure → toast 「下載 QR Code 失敗」 |
+
+`qrcode` is CommonJS, so `angular.json` lists it under `allowedCommonJsDependencies`. It is only imported by the detail page and lands in that lazy chunk.
+
 ### Form page
 
 | Field | Control | Validation |
@@ -533,7 +546,7 @@ Partner, CourseGroup and PublishStatus list 操作 columns and detail toolbars g
 - `date.util.spec.ts` — `toIso` uses local components; `parseIso` round-trips
 - `course.service.spec.ts` — every method URL/verb
 - `course-list.spec.ts` — renders rows with nav labels, lookups loaded, incoming `partnerPkid` param overrides saved filters, filter persistence incl. date → ISO, sort/page, navigation, delete confirm + 409; in-place editing: single click doesn't open an editor and double-click does (with the current value), each column renders its editor type, 主代碼 / 原廠 / 課程群組 can't be edited, blur calls `get` + `update` with the trimmed value and the record's n-n keys, an unchanged value and Escape send nothing, a cleared required field shows 「必填」 and stays open, 時數 / 定價 / 點數 reject negative / NaN / null and accept 0, dates reject invalid / null, 上架 > 下架 is blocked from either side, dates are saved as ISO, 上架狀態 / 允許重聽 save, and a failed save reverts the row and shows an error toast
-- `course-detail.spec.ts` — renders fields, chips resolved from lookups, null group shows 「—」, edit/back
+- `course-detail.spec.ts` — renders fields, chips resolved from lookups, null group shows 「—」, edit/back; QR code: `courseShowUrl` builds and encodes the URL, the image is the PNG `qrcode` produces for the loaded record's pkid/CourseId (and differs from another URL's), `#qr-title` is the CourseId, the download button calls `downloadQr`, and the download is a `{CourseId}.png` data URL of 200 × 236 with text in the title band
 - `course-form.spec.ts` — add: defaults, required validation, date-range validator, ScheduleOff auto-default, create payload (ISO dates, nulls, n-n); edit: loads record, pkid read-only, update payload, cancel
 - Parent list/detail specs — 查看課程 navigates with the right query param
 - `app.spec.ts` — sidebar entry
@@ -554,6 +567,7 @@ Partner, CourseGroup and PublishStatus list 操作 columns and detail toolbars g
 | Frontend | `features/courses/course.model.ts`, `course.service.ts` + spec | create |
 | Frontend | `features/courses/course-list/`, `course-detail/`, `course-form/` (ts, html, spec) | create |
 | Frontend | `app.routes.ts`, `app.ts`, `app.spec.ts` | modify |
+| Frontend | `package.json` (`qrcode`, dev `@types/qrcode`), `angular.json` (`allowedCommonJsDependencies`) | modify — QR code |
 | Frontend | `partners/partner-list`, `partner-detail`; `course-groups/course-group-list`, `course-group-detail`; `publish-statuses/publish-status-list`, `publish-status-detail` (ts, html, spec) | modify — 查看課程 button |
 | Frontend | `features/courses/course-list/` (ts, html, spec) | modify — in-place cell editing |
-| Docs | `CLAUDE.md` | modify — Features list |
+| Docs | `docs/features.md` | modify — append feature entry |

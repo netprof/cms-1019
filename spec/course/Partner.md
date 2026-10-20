@@ -385,4 +385,4 @@ Same style as `PublishStatusesApiTests`: real HTTP pipeline via `WebApplicationF
 | Frontend | `src/CMS.NG/src/app/app.routes.ts` | modify — lazy routes |
 | Frontend | `src/CMS.NG/src/app/app.ts` | modify — new nav group + entry |
 | Frontend | `src/CMS.NG/src/app/app.spec.ts` | modify — sidebar test |
-| Docs | `CLAUDE.md` | modify — Features list |
+| Docs | `docs/features.md` | modify — append feature entry |
