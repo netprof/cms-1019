@@ -57,8 +57,12 @@ public class FakeTokenUsageRepository : ITokenUsageRepository
             .Where(r => string.Equals(r.Model, model, StringComparison.OrdinalIgnoreCase))
             .Select(Clone).ToList());
 
+    /// <summary>Makes <see cref="UpdateCostsAsync"/> throw, as a failing SQL write would.</summary>
+    public bool FailCostUpdates { get; set; }
+
     public Task UpdateCostsAsync(IReadOnlyList<TokenUsage> rows)
     {
+        if (FailCostUpdates) throw new InvalidOperationException("Simulated cost update failure.");
         foreach (var row in rows)
             _rows.Single(r => r.SessionId == row.SessionId && r.UsageDate == row.UsageDate
                 && string.Equals(r.Model, row.Model, StringComparison.OrdinalIgnoreCase)).Cost = row.Cost;

@@ -58,6 +58,7 @@ public class FakeModelPriceRepository : IModelPriceRepository
             CacheReadPrice = r.CacheReadPrice, OutputPrice = r.OutputPrice,
         };
         _prices.Add(price);
+        FakeTransaction.OnRollback(() => _prices.Remove(price));
         return Task.FromResult(Clone(price));
     }
 
@@ -65,6 +66,8 @@ public class FakeModelPriceRepository : IModelPriceRepository
     {
         var price = Find(r.Model, r.EffectiveDate);
         if (price is null) return Task.FromResult<ModelPrice?>(null);
+        var before = Clone(price);
+        FakeTransaction.OnRollback(() => { _prices.Remove(price); _prices.Add(before); });
         price.InputPrice = r.InputPrice;
         price.CacheWrite5mPrice = r.CacheWrite5mPrice;
         price.CacheWrite1hPrice = r.CacheWrite1hPrice;
@@ -76,6 +79,8 @@ public class FakeModelPriceRepository : IModelPriceRepository
     public Task<bool> DeleteAsync(string model, DateOnly effectiveDate)
     {
         var price = Find(model, effectiveDate);
-        return Task.FromResult(price is not null && _prices.Remove(price));
+        if (price is null || !_prices.Remove(price)) return Task.FromResult(false);
+        FakeTransaction.OnRollback(() => _prices.Add(price));
+        return Task.FromResult(true);
     }
 }

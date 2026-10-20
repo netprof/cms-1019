@@ -59,7 +59,7 @@ public class ModelPriceRepository(IDbConnectionFactory connectionFactory) : IMod
     public async Task<ModelPrice?> GetByIdAsync(string model, DateOnly effectiveDate)
     {
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        return await conn.QuerySingleOrDefaultAsync<ModelPrice>(SelectSql + KeyWhere, new { model, effectiveDate });
+        return await ReadAsync(conn, model, effectiveDate);
     }
 
     public async Task<bool> ExistsAsync(string model, DateOnly effectiveDate)
@@ -68,6 +68,11 @@ public class ModelPriceRepository(IDbConnectionFactory connectionFactory) : IMod
         return await conn.ExecuteScalarAsync<int>(
             "SELECT COUNT(*) FROM ModelPrice m" + KeyWhere, new { model, effectiveDate }) > 0;
     }
+
+    // Writes re-read on the connection they wrote with: callers run them inside a DbTransactionScope,
+    // where a second open connection would escalate to a distributed transaction.
+    private static Task<ModelPrice?> ReadAsync(System.Data.IDbConnection conn, string model, DateOnly effectiveDate) =>
+        conn.QuerySingleOrDefaultAsync<ModelPrice>(SelectSql + KeyWhere, new { model, effectiveDate });
 
     public async Task<ModelPrice> CreateAsync(ModelPriceRequest request)
     {
@@ -78,7 +83,7 @@ public class ModelPriceRepository(IDbConnectionFactory connectionFactory) : IMod
             VALUES (@Model, @EffectiveDate, @InputPrice, @CacheWrite5mPrice, @CacheWrite1hPrice, @CacheReadPrice, @OutputPrice)
             """, request);
 
-        return (await GetByIdAsync(request.Model, request.EffectiveDate))!;
+        return (await ReadAsync(conn, request.Model, request.EffectiveDate))!;
     }
 
     public async Task<ModelPrice?> UpdateAsync(ModelPriceRequest request)
@@ -96,7 +101,7 @@ public class ModelPriceRepository(IDbConnectionFactory connectionFactory) : IMod
             """, request);
         if (rows == 0) return null;
 
-        return await GetByIdAsync(request.Model, request.EffectiveDate);
+        return await ReadAsync(conn, request.Model, request.EffectiveDate);
     }
 
     public async Task<bool> DeleteAsync(string model, DateOnly effectiveDate)

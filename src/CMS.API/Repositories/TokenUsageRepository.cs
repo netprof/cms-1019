@@ -89,13 +89,16 @@ public class TokenUsageRepository(IDbConnectionFactory connectionFactory) : ITok
 
     public async Task UpdateCostsAsync(IReadOnlyList<TokenUsage> rows)
     {
-        using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        using var tx = conn.BeginTransaction();
-        await conn.ExecuteAsync(
-            """
-            UPDATE TokenUsage SET Cost = @Cost
-            WHERE SessionId = @SessionId AND UsageDate = @UsageDate AND Model = @Model
-            """, rows, tx);
-        await tx.CommitAsync();
+        // A scope, not a local transaction, so a caller's scope (ModelPrice write + recompute) covers it too.
+        using var scope = DbTransactionScope.Begin();
+        using (var conn = await connectionFactory.CreateOpenConnectionAsync())
+        {
+            await conn.ExecuteAsync(
+                """
+                UPDATE TokenUsage SET Cost = @Cost
+                WHERE SessionId = @SessionId AND UsageDate = @UsageDate AND Model = @Model
+                """, rows);
+        }
+        scope.Complete();
     }
 }

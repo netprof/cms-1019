@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using CMS.API.Models;
 using CMS.API.Repositories;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -165,5 +166,49 @@ public class TokenUsagePricingApiTests : IClassFixture<WebApplicationFactory<Pro
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Assert.Null(CostOf("2026-10-20", "claude-haiku-5-5"));
+    }
+
+    // ---- a failed recompute rolls the price change back ----
+
+    private async Task<ModelPrice?> GetPriceAsync(string model, string date)
+    {
+        var response = await _factory.CreateClient().GetAsync($"/api/modelprices/{model}/{date}");
+        return response.StatusCode == HttpStatusCode.NotFound ? null : await response.Content.ReadFromJsonAsync<ModelPrice>();
+    }
+
+    [Fact]
+    public async Task CreatePrice_RecomputeFails_PriceIsNotStored()
+    {
+        await IngestAsync("s-1", Row("2026-10-20"));
+        _usages.FailCostUpdates = true;
+
+        var response = await _factory.CreateClient().PostAsJsonAsync("/api/modelprices", Price("claude-opus-5-5", "2026-10-01", 1m));
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Null(await GetPriceAsync("claude-opus-5-5", "2026-10-01"));
+    }
+
+    [Fact]
+    public async Task UpdatePrice_RecomputeFails_PriceIsUnchanged()
+    {
+        await IngestAsync("s-1", Row("2026-06-01"));
+        _usages.FailCostUpdates = true;
+
+        var response = await _factory.CreateClient().PutAsJsonAsync("/api/modelprices", Price("claude-opus-5-5", "2026-06-01", 2m));
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal(3m, (await GetPriceAsync("claude-opus-5-5", "2026-06-01"))!.InputPrice);
+    }
+
+    [Fact]
+    public async Task DeletePrice_RecomputeFails_PriceIsKept()
+    {
+        await IngestAsync("s-1", Row("2026-06-01"));
+        _usages.FailCostUpdates = true;
+
+        var response = await _factory.CreateClient().DeleteAsync("/api/modelprices/claude-opus-5-5/2026-06-01");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.NotNull(await GetPriceAsync("claude-opus-5-5", "2026-06-01"));
     }
 }

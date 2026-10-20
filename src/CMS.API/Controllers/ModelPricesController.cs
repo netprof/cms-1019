@@ -1,3 +1,4 @@
+using CMS.API.Data;
 using CMS.API.Models;
 using CMS.API.Repositories;
 using CMS.API.Services;
@@ -9,7 +10,8 @@ namespace CMS.API.Controllers;
 /// <summary>
 /// Claude model price list. Composite key (Model, EffectiveDate): routes are
 /// <c>/api/modelprices/{model}/{effectiveDate:yyyy-MM-dd}</c>.
-/// Create, update and delete recompute the cost of that model's TokenUsage rows.
+/// Create, update and delete recompute the cost of that model's TokenUsage rows, in the same
+/// transaction as the price write, so a failed recompute leaves the price unchanged.
 /// </summary>
 [ApiController]
 [Route("api/modelprices")]
@@ -46,8 +48,10 @@ public class ModelPricesController(IModelPriceRepository repository, TokenCostSe
 
         try
         {
+            using var scope = DbTransactionScope.Begin();
             var created = await repository.CreateAsync(request);
             await costService.RecomputeModelAsync(created.Model);
+            scope.Complete();
             return CreatedAtAction(nameof(GetById),
                 new { model = created.Model, effectiveDate = created.EffectiveDate.ToString("yyyy-MM-dd") }, created);
         }
@@ -61,19 +65,23 @@ public class ModelPricesController(IModelPriceRepository repository, TokenCostSe
     public async Task<ActionResult<ModelPrice>> Update(ModelPriceRequest request)
     {
         request.Model = request.Model.Trim();
+        using var scope = DbTransactionScope.Begin();
         var updated = await repository.UpdateAsync(request);
         if (updated is null) return NotFound();
 
         await costService.RecomputeModelAsync(updated.Model);
+        scope.Complete();
         return Ok(updated);
     }
 
     [HttpDelete("{model}/{effectiveDate}")]
     public async Task<IActionResult> Delete(string model, DateOnly effectiveDate)
     {
+        using var scope = DbTransactionScope.Begin();
         if (!await repository.DeleteAsync(model, effectiveDate)) return NotFound();
 
         await costService.RecomputeModelAsync(model);
+        scope.Complete();
         return NoContent();
     }
 
