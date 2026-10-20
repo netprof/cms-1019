@@ -1,5 +1,6 @@
 using CMS.API.Data;
 using CMS.API.Repositories;
+using CMS.API.Services;
 using Dapper;
 
 SqlMapper.AddTypeHandler(new DateOnlyTypeHandler());
@@ -19,6 +20,11 @@ builder.Services.AddScoped<IPartnerRepository, PartnerRepository>();
 builder.Services.AddScoped<ICourseGroupRepository, CourseGroupRepository>();
 builder.Services.AddScoped<ICourseRepository, CourseRepository>();
 builder.Services.AddScoped<IFeaturedPromoItemRepository, FeaturedPromoItemRepository>();
+builder.Services.AddScoped<IModelPriceRepository, ModelPriceRepository>();
+builder.Services.AddScoped<ITokenUsageRepository, TokenUsageRepository>();
+builder.Services.AddScoped<IIngestApiKeyReader, IngestApiKeyReader>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<TokenCostService>();
 
 builder.Services.AddCors(options =>
 {

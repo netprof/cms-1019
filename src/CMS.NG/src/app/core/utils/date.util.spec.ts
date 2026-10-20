@@ -1,6 +1,12 @@
-import { addDays, addYears, mondayOf, parseIso, toIso } from './date.util';
+import { addDays, addYears, mondayOf, parseIso, taipeiToday, toIso } from './date.util';
 
 describe('date.util', () => {
+  it('taipeiToday() is the UTC+8 calendar date as a local-midnight Date, whatever the browser time zone', () => {
+    expect(taipeiToday(new Date(Date.UTC(2026, 9, 20, 15, 59, 59)))).toEqual(new Date(2026, 9, 20));
+    expect(taipeiToday(new Date(Date.UTC(2026, 9, 20, 16, 0, 0)))).toEqual(new Date(2026, 9, 21));
+    expect(taipeiToday(new Date(Date.UTC(2026, 11, 31, 16, 0, 0)))).toEqual(new Date(2027, 0, 1));
+  });
+
   it('addDays() crosses month boundaries and goes backwards', () => {
     expect(addDays(new Date(2026, 2, 30), 3)).toEqual(new Date(2026, 3, 2));
     expect(addDays(new Date(2026, 2, 2), -7)).toEqual(new Date(2026, 1, 23));

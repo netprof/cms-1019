@@ -90,6 +90,40 @@ export const routes: Routes = [
     ],
   },
   {
+    // Composite key (model, effectiveDate): detail/edit routes carry both parts.
+    path: 'model-prices',
+    children: [
+      {
+        path: '',
+        loadComponent: () =>
+          import('./features/model-prices/model-price-list/model-price-list').then(
+            (m) => m.ModelPriceList,
+          ),
+      },
+      {
+        path: 'new',
+        loadComponent: () =>
+          import('./features/model-prices/model-price-form/model-price-form').then(
+            (m) => m.ModelPriceForm,
+          ),
+      },
+      {
+        path: ':model/:date/edit',
+        loadComponent: () =>
+          import('./features/model-prices/model-price-form/model-price-form').then(
+            (m) => m.ModelPriceForm,
+          ),
+      },
+      {
+        path: ':model/:date',
+        loadComponent: () =>
+          import('./features/model-prices/model-price-detail/model-price-detail').then(
+            (m) => m.ModelPriceDetail,
+          ),
+      },
+    ],
+  },
+  {
     path: 'partners',
     children: [
       {
@@ -178,6 +212,14 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/featured-promo-items/featured-promo-item-list/featured-promo-item-list').then(
         (m) => m.FeaturedPromoItemList,
+      ),
+  },
+  {
+    // Read-only report: no new / detail / edit routes.
+    path: 'token-usages',
+    loadComponent: () =>
+      import('./features/token-usages/token-usage-report/token-usage-report').then(
+        (m) => m.TokenUsageReport,
       ),
   },
   { path: '**', redirectTo: 'app-roles' },

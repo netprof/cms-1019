@@ -102,6 +102,26 @@ CREATE TABLE [dbo].[SysConfig](
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 GO
+/****** Object:  Table [dbo].[ModelPrice]    Claude model prices, USD per million tokens ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ModelPrice](
+	[Model] [nvarchar](100) NOT NULL,
+	[EffectiveDate] [date] NOT NULL,
+	[InputPrice] [decimal](18, 6) NOT NULL,
+	[CacheWrite5mPrice] [decimal](18, 6) NOT NULL,
+	[CacheWrite1hPrice] [decimal](18, 6) NOT NULL,
+	[CacheReadPrice] [decimal](18, 6) NOT NULL,
+	[OutputPrice] [decimal](18, 6) NOT NULL,
+ CONSTRAINT [PK_ModelPrice] PRIMARY KEY CLUSTERED
+(
+	[Model] ASC,
+	[EffectiveDate] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
 
 GO
 ALTER TABLE [dbo].[AppRole] ADD  CONSTRAINT [DF_AppRole_Privilege]  DEFAULT ((100)) FOR [PermissionLevel]
@@ -120,4 +140,52 @@ ALTER TABLE [dbo].[AppUserRole] CHECK CONSTRAINT [FK_AppUserRole_AppUser]
 GO
 
 
+GO
+-- ModelPrice seed: Claude 5 family, official Anthropic first-party pricing
+-- (https://platform.claude.com/docs/en/about-claude/pricing, read 2026-10-20).
+-- Haiku 5.5 uses its <=100K-token prompt tier; prompts over 100K cost 5x.
+INSERT INTO [dbo].[ModelPrice] ([Model], [EffectiveDate], [InputPrice], [CacheWrite5mPrice], [CacheWrite1hPrice], [CacheReadPrice], [OutputPrice]) VALUES
+(N'claude-fable-5-1',  '2026-01-01', 10.00, 12.50, 20.00, 0.25, 50.00),
+(N'claude-fable-5',    '2026-01-01', 10.00, 12.50, 20.00, 1.00, 50.00),
+(N'claude-opus-5-5',   '2026-01-01',  4.00,  5.00,  8.00, 0.20, 20.00),
+(N'claude-opus-5',     '2026-01-01',  5.00,  6.25, 10.00, 0.50, 25.00),
+(N'claude-sonnet-5-5', '2026-01-01',  2.00,  2.50,  4.00, 0.10, 10.00),
+(N'claude-sonnet-5',   '2026-01-01',  2.00,  2.50,  4.00, 0.20, 10.00),
+(N'claude-haiku-5-5',  '2026-01-01',  0.10, 0.125,  0.20, 0.01,  0.50)
+GO
+/****** Object:  Table [dbo].[TokenUsage]    Claude Code token usage per (session, Taipei date, model) ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[TokenUsage](
+	[SessionId] [nvarchar](100) NOT NULL,
+	[UsageDate] [date] NOT NULL,
+	[Model] [nvarchar](100) NOT NULL,
+	[UserId] [nvarchar](200) NOT NULL,
+	[Project] [nvarchar](200) NOT NULL,
+	[InputTokens] [bigint] NOT NULL,
+	[CacheWrite5mTokens] [bigint] NOT NULL,
+	[CacheWrite1hTokens] [bigint] NOT NULL,
+	[CacheReadTokens] [bigint] NOT NULL,
+	[OutputTokens] [bigint] NOT NULL,
+	[Cost] [decimal](18, 6) NULL,
+	[UpdatedTime] [datetime] NOT NULL,
+ CONSTRAINT [PK_TokenUsage] PRIMARY KEY CLUSTERED 
+(
+	[SessionId] ASC,
+	[UsageDate] ASC,
+	[Model] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[TokenUsage]  WITH CHECK ADD  CONSTRAINT [FK_TokenUsage_AppUser] FOREIGN KEY([UserId])
+REFERENCES [dbo].[AppUser] ([UserId])
+GO
+ALTER TABLE [dbo].[TokenUsage] CHECK CONSTRAINT [FK_TokenUsage_AppUser]
+GO
+/****** SysConfig row: shared X-Api-Key for POST /api/tokenusages (replace the placeholder per environment) ******/
+IF NOT EXISTS (SELECT 1 FROM [dbo].[SysConfig] WHERE [configKey] = N'tokenUsageConfig')
+	INSERT INTO [dbo].[SysConfig] ([configKey], [configValue])
+	VALUES (N'tokenUsageConfig', N'{ "apiKey": "change-me-token-usage-api-key" }')
 GO

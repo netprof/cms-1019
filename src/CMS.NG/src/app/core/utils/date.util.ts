@@ -14,6 +14,15 @@ export function toIso(date: Date | null | undefined): string | null {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * Today's calendar date in Taipei (fixed UTC+8, no DST) as a local-midnight `Date`, whatever
+ * the browser's time zone. Use it where "today" must agree with the server's Taipei dates.
+ */
+export function taipeiToday(now: Date = new Date()): Date {
+  const taipei = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  return new Date(taipei.getUTCFullYear(), taipei.getUTCMonth(), taipei.getUTCDate());
+}
+
 /** `yyyy-MM-dd` → local `Date` at midnight; null/blank/invalid → null. */
 export function parseIso(value: string | null | undefined): Date | null {
   if (!value) return null;

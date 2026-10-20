@@ -86,6 +86,13 @@ public class AppUserRepository(IDbConnectionFactory connectionFactory) : IAppUse
             "SELECT COUNT(*) FROM AppUser WHERE UserId = @userId", new { userId }) > 0;
     }
 
+    public async Task<bool> IsActiveUserAsync(string userId)
+    {
+        using var conn = await connectionFactory.CreateOpenConnectionAsync();
+        return await conn.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM AppUser WHERE UserId = @userId AND IsActive = 1", new { userId }) > 0;
+    }
+
     public async Task<AppUser> CreateAsync(AppUserRequest request, string passwordHash)
     {
         using var conn = await connectionFactory.CreateOpenConnectionAsync();

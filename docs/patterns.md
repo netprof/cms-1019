@@ -11,6 +11,7 @@ Recipes for cases that come up when adding a feature. Each names the feature tha
 
 - **String PK** (`AppRole.RoleId`, `AppUser.UserId`): the `pkid` identity column is a read-only surrogate, not the key. Controller route is `{id}` with no `:int`; the Angular service calls `encodeURIComponent(id)`.
 - **User-supplied numeric PK** (`PublishStatus.pkid tinyint`): `POST` returns 409 on a duplicate; the key field is editable on add and locked on edit. Edit mode disables the control, so read the form with `getRawValue()`.
+- **Composite user-supplied key** (`ModelPrice`: `Model` + `EffectiveDate`): routes carry every key part (`/api/modelprices/{model}/{yyyy-MM-dd}`, Angular `:model/:date`), `POST` returns 409 on a duplicate, and all key fields are locked on edit.
 - **`smallint IDENTITY`** (`Partner`, `CourseGroup`): C# `short`; the key is displayed read-only in edit mode and is not a form control.
 
 ## Server-controlled columns
@@ -21,10 +22,15 @@ Example: `AppUser.PasswordHash`.
 - Pass the computed value into the repository as a separate parameter (`CreateAsync(request, passwordHash)`) so the fake repository in tests can assert exactly what was stored.
 - Give the column its own endpoint (`POST /{id}/reset-password`) instead of a request field. `PUT` never touches it.
 - `datetime` columns written by the server use `DateTime.UtcNow`; Angular templates append `'Z'` before the `date` pipe.
+- Where tests need to pin the clock, inject `TimeProvider` (registered as `TimeProvider.System` in `Program.cs`) and read `timeProvider.GetUtcNow().UtcDateTime` instead; tests replace it with a fixed provider. Precedent: `TokenUsagesController` (`UpdatedTime`, Taipei "today").
 
 ## Reading `SysConfig`
 
-`SysConfig` (`auth.sql`) is a key/JSON-value table. Read a setting with `SELECT configValue … WHERE configKey = '…'` and parse with `System.Text.Json`. Throw `InvalidOperationException` (→ 500) when the row or the property is missing. Precedent: `AppUserRepository.GetDefaultPasswordAsync`.
+`SysConfig` (`auth.sql`) is a key/JSON-value table. Read a setting with `SELECT configValue … WHERE configKey = '…'` and parse with `System.Text.Json`. Throw `InvalidOperationException` (→ 500) when the row or the property is missing. Precedent: `AppUserRepository.GetDefaultPasswordAsync`. Exception: a secret checked by an auth filter returns `null` when missing and the filter answers 401 with a logged warning (`IIngestApiKeyReader`).
+
+## One transaction across repositories
+
+Wrap the calls in `using var scope = DbTransactionScope.Begin(); … scope.Complete();` (`Data/DbTransactionScope.cs`, READ COMMITTED, async flow). Connections enlist automatically; open them one at a time (a repository method must not open a second connection while its first is open), or the transaction escalates to distributed and fails. Repository methods that need their own atomicity use the same scope instead of `BeginTransaction()`, so an outer scope covers them. Fakes undo their writes on rollback via `FakeTransaction.OnRollback`. Precedent: `ModelPricesController` (price write + cost recompute).
 
 ## Child tables vs n-n links
 
