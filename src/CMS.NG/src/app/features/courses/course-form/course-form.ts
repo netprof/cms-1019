@@ -56,6 +56,14 @@ function scheduleRangeValidator(group: AbstractControl): ValidationErrors | null
       flex-wrap: wrap;
       gap: 0.35rem;
     }
+    /* Save/Cancel stay pinned to the top of the content column while the page scrolls; z-index sits below PrimeNG overlays. */
+    .sticky-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      flex-wrap: wrap;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    }
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
