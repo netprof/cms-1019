@@ -60,3 +60,14 @@ API only (no UI yet): `POST /api/tokenusages` receives one Claude Code session's
 - 400 (`ValidationProblem`): required / over-length `sessionId` (100), `userId` (200), `project` (200), `model` (100); unknown or inactive user; negative tokens; `date` after today in Taipei (clock via injected `TimeProvider`, fixed +8 offset); duplicate (date, model). Text is trimmed and model duplicates are compared case-insensitively, matching SQL Server key comparison.
 - `ReplaceSessionAsync` deletes the session's rows and inserts the new ones in one transaction (verified: a failing insert rolls the delete back). Re-posting replaces; empty `rows` clears the session.
 - `Cost` is always `NULL` for now (pricing pending).
+
+## TokenUsage report (`admin.sql`)
+
+Read-only report page `/token-usages` (hand-written, not `/crud`): filter bar, server-paged sortable table, totals row, no export and no add/edit/delete. Menu: `系統管理 Admin → 用量報表 TokenUsage`.
+
+- `POST /api/tokenusages/report` (anonymous, unlike ingest) takes `{ from, to, userId, project, model, first, rows, sortField, sortOrder }` and returns `{ items, totalRecords, totals }`. Rows are `TokenUsage` summed by `(UserId, UsageDate, Project, Model)` and joined to `AppUser` for `userName`.
+- Filters: `from`/`to` are `DateOnly`, inclusive (`from > to` → 400); `userId` exact (p-select over `/api/lookups/appusers`); `project` and `model` contains.
+- Unlike the other lists, paging and sorting are server-side (PrimeNG `[lazy]` table): the repository returns every aggregated row of the filtered set and the controller sorts, pages (`first` ≥ 0, `rows` 1–500) and totals in memory. `sortField` is whitelisted to the camelCase column names (unknown → 400), `sortOrder` is 1/-1; ties break by date desc, user, project, model. Default: `usageDate` desc, 20 rows.
+- `tokenIn` = input + both cache writes + cache read (computed by the API, on rows and totals). `cost` is `SUM(Cost)`, which ignores unpriced rows and is `NULL` only when nothing in the group (or the whole set) is priced; the page shows `NULL` as blank.
+- The page's date range defaults to the 1st of this month through today (local dates); 清除 restores that. Filters/sort/page persist in `tokenusage-report-filters` / `-sort` / `-page`.
+- Report SQL verified against the real `CMS` DB (aggregation across sessions, NULL-ignoring cost sum, inclusive range, contains filters, empty result).

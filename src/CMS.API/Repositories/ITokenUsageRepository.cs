@@ -15,4 +15,10 @@ public interface ITokenUsageRepository
     /// In one transaction, deletes every row of <paramref name="sessionId"/> and inserts <paramref name="rows"/>.
     /// </summary>
     Task ReplaceSessionAsync(string sessionId, IReadOnlyList<TokenUsage> rows);
+
+    /// <summary>
+    /// Filtered usage summed by (UserId, UsageDate, Project, Model), with the user's name from AppUser.
+    /// Unordered and unpaged; the controller sorts, pages and totals.
+    /// </summary>
+    Task<IReadOnlyList<TokenUsageReportRow>> GetReportRowsAsync(TokenUsageReportFilter filter);
 }

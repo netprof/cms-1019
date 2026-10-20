@@ -46,6 +46,16 @@ describe('App', () => {
     expect(link.getAttribute('href')).toBe('/publish-statuses');
   });
 
+  it('should show the TokenUsage report entry under 系統管理 Admin', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const links = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('a.nav-item'));
+    const link = links.find((a) => a.textContent?.includes('用量報表 TokenUsage')) as HTMLAnchorElement;
+
+    expect(link).toBeDefined();
+    expect(link.getAttribute('href')).toBe('/token-usages');
+  });
+
   it('should show the Partner entry under a 課程管理 Course group', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();

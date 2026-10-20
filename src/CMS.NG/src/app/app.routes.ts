@@ -180,5 +180,13 @@ export const routes: Routes = [
         (m) => m.FeaturedPromoItemList,
       ),
   },
+  {
+    // Read-only report: no new / detail / edit routes.
+    path: 'token-usages',
+    loadComponent: () =>
+      import('./features/token-usages/token-usage-report/token-usage-report').then(
+        (m) => m.TokenUsageReport,
+      ),
+  },
   { path: '**', redirectTo: 'app-roles' },
 ];
