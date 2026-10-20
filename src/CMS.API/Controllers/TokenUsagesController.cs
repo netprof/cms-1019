@@ -1,3 +1,4 @@
+using CMS.API.Data;
 using CMS.API.Models;
 using CMS.API.Repositories;
 using CMS.API.Services;
@@ -49,19 +50,18 @@ public class TokenUsagesController(
     {
         if (query.From > query.To)
             ModelState.AddModelError(nameof(query.To), "To must not be earlier than From.");
-        if (!ReportSortKeys.TryGetValue(query.SortField, out var sortKey))
+        if (!ReportSorts.TryGetValue(query.SortField, out var sort))
             ModelState.AddModelError(nameof(query.SortField), $"Cannot sort by '{query.SortField}'.");
         if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
         // Aggregated rows are few (users x days x projects x models), so sort and page in memory,
         // as the other list pages do client-side.
         var rows = await repository.GetReportRowsAsync(query);
-        var ordered = query.SortOrder == 1 ? rows.OrderBy(sortKey!) : rows.OrderByDescending(sortKey!);
-        var page = ordered
+        var page = sort!(rows, query.SortOrder == 1)
             .ThenByDescending(r => r.UsageDate)
-            .ThenBy(r => r.UserId, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(r => r.Project, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(r => r.Model, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.UserId, SqlCollation.Comparer)
+            .ThenBy(r => r.Project, SqlCollation.Comparer)
+            .ThenBy(r => r.Model, SqlCollation.Comparer)
             .Skip(query.First)
             .Take(query.Rows)
             .ToList();
@@ -82,23 +82,29 @@ public class TokenUsagesController(
         });
     }
 
-    /// <summary>Sortable report columns by their JSON (camelCase) name; text compares case-insensitively like SQL Server.</summary>
-    private static readonly Dictionary<string, Func<TokenUsageReportRow, object?>> ReportSortKeys =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            ["usageDate"] = r => r.UsageDate,
-            ["userId"] = r => r.UserId.ToUpperInvariant(),
-            ["userName"] = r => r.UserName.ToUpperInvariant(),
-            ["project"] = r => r.Project.ToUpperInvariant(),
-            ["model"] = r => r.Model.ToUpperInvariant(),
-            ["inputTokens"] = r => r.InputTokens,
-            ["cacheWrite5mTokens"] = r => r.CacheWrite5mTokens,
-            ["cacheWrite1hTokens"] = r => r.CacheWrite1hTokens,
-            ["cacheReadTokens"] = r => r.CacheReadTokens,
-            ["outputTokens"] = r => r.OutputTokens,
-            ["tokenIn"] = r => r.TokenIn,
-            ["cost"] = r => r.Cost,
-        };
+    private delegate IOrderedEnumerable<TokenUsageReportRow> ReportSort(IEnumerable<TokenUsageReportRow> rows, bool ascending);
+
+    private static ReportSort By<TKey>(Func<TokenUsageReportRow, TKey> key, IComparer<TKey>? comparer = null) =>
+        (rows, ascending) => ascending ? rows.OrderBy(key, comparer) : rows.OrderByDescending(key, comparer);
+
+    private static ReportSort ByText(Func<TokenUsageReportRow, string> key) => By(key, SqlCollation.Comparer);
+
+    /// <summary>Sortable report columns by their JSON (camelCase) name.</summary>
+    private static readonly Dictionary<string, ReportSort> ReportSorts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["usageDate"] = By(r => r.UsageDate),
+        ["userId"] = ByText(r => r.UserId),
+        ["userName"] = ByText(r => r.UserName),
+        ["project"] = ByText(r => r.Project),
+        ["model"] = ByText(r => r.Model),
+        ["inputTokens"] = By(r => r.InputTokens),
+        ["cacheWrite5mTokens"] = By(r => r.CacheWrite5mTokens),
+        ["cacheWrite1hTokens"] = By(r => r.CacheWrite1hTokens),
+        ["cacheReadTokens"] = By(r => r.CacheReadTokens),
+        ["outputTokens"] = By(r => r.OutputTokens),
+        ["tokenIn"] = By(r => r.TokenIn),
+        ["cost"] = By(r => r.Cost),
+    };
 
     /// <summary>Taipei is a fixed UTC+8 (no DST); the server itself has no time-zone handling.</summary>
     private static readonly TimeSpan TaipeiOffset = TimeSpan.FromHours(8);
@@ -122,11 +128,12 @@ public class TokenUsagesController(
                 ModelState.AddModelError($"Rows[{i}].Date", $"Date {rows[i].Date:yyyy-MM-dd} is later than today in Taipei ({today:yyyy-MM-dd}).");
         }
 
-        // (date, model) is part of the primary key; SQL Server's default collation is case-insensitive.
+        // (date, model) is part of the primary key, so models compare as SQL Server does.
         var duplicates = rows
-            .GroupBy(r => (r.Date, Model: r.Model.ToUpperInvariant()))
+            .GroupBy(r => r.Date)
+            .SelectMany(byDate => byDate.GroupBy(r => r.Model, SqlCollation.Comparer))
             .Where(g => g.Count() > 1)
-            .Select(g => $"{g.Key.Date:yyyy-MM-dd} / {g.First().Model}");
+            .Select(g => $"{g.First().Date:yyyy-MM-dd} / {g.First().Model}");
         foreach (var duplicate in duplicates)
             ModelState.AddModelError(nameof(TokenUsageIngestRequest.Rows), $"Duplicate row for (date, model) {duplicate}.");
     }

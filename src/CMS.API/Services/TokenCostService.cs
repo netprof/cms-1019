@@ -1,3 +1,4 @@
+using CMS.API.Data;
 using CMS.API.Models;
 using CMS.API.Repositories;
 
@@ -30,9 +31,8 @@ public class TokenCostService(IModelPriceRepository prices, ITokenUsageRepositor
 
     private static decimal? CostOf(TokenUsage row, IEnumerable<ModelPrice> all)
     {
-        // Model matches case-insensitively, like SQL Server's default collation.
         var price = all
-            .Where(p => string.Equals(p.Model, row.Model, StringComparison.OrdinalIgnoreCase)
+            .Where(p => SqlCollation.Comparer.Equals(p.Model, row.Model)
                 && p.EffectiveDate <= row.UsageDate)
             .MaxBy(p => p.EffectiveDate);
         if (price is null) return null;
