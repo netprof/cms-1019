@@ -1,0 +1,67 @@
+<p-toast />
+
+<form [formGroup]="form" (ngSubmit)="save()">
+  <div class="page-header sticky-toolbar" id="form-toolbar">
+    <h1>我的資料 <small>My Profile</small></h1>
+    <div class="actions">
+      <p-button id="cancel-button" label="取消" icon="pi pi-times" severity="secondary" (onClick)="cancel()" />
+      <p-button id="save-button" type="submit" label="儲存" icon="pi pi-check" [loading]="saving()" />
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>使用者資料</h2>
+
+    <div class="field">
+      <label for="userId">帳號</label>
+      <input pInputText id="userId" [value]="auth.profile()?.userId ?? ''" readonly disabled />
+    </div>
+
+    <div class="field">
+      <label for="userName">名稱<span class="req">*</span></label>
+      <input pInputText id="userName" formControlName="userName" maxlength="200" autocomplete="name" />
+      @if (invalid()) { <small class="error">請輸入名稱</small> }
+    </div>
+
+    <div class="field">
+      <label>角色</label>
+      <div class="roles" id="roles">
+        @for (role of auth.roles(); track role) {
+          <p-tag [value]="role" severity="secondary" />
+        } @empty {
+          <span>（無）</span>
+        }
+      </div>
+    </div>
+  </div>
+</form>
+
+<form [formGroup]="passwordForm" (ngSubmit)="changePassword()" id="password-form">
+  <div class="card">
+    <h2>變更密碼</h2>
+
+    <div class="field">
+      <label for="currentPassword">目前密碼<span class="req">*</span></label>
+      <p-password inputId="currentPassword" formControlName="currentPassword" [feedback]="false" [toggleMask]="true" autocomplete="current-password" [style]="{ width: '100%' }" [inputStyle]="{ width: '100%' }" />
+      @if (passwordError('currentPassword'); as error) { <small class="error" id="currentPassword-error">{{ error }}</small> }
+    </div>
+
+    <div class="field">
+      <label for="newPassword">新密碼<span class="req">*</span></label>
+      <p-password inputId="newPassword" formControlName="newPassword" [feedback]="false" [toggleMask]="true" autocomplete="new-password" [style]="{ width: '100%' }" [inputStyle]="{ width: '100%' }" />
+      @if (passwordError('newPassword'); as error) {
+        <small class="error" id="newPassword-error">{{ error }}</small>
+      } @else {
+        <small class="hint">{{ policyMessage }}</small>
+      }
+    </div>
+
+    <div class="field">
+      <label for="confirmPassword">確認新密碼<span class="req">*</span></label>
+      <p-password inputId="confirmPassword" formControlName="confirmPassword" [feedback]="false" [toggleMask]="true" autocomplete="new-password" [style]="{ width: '100%' }" [inputStyle]="{ width: '100%' }" />
+      @if (passwordError('confirmPassword'); as error) { <small class="error" id="confirmPassword-error">{{ error }}</small> }
+    </div>
+
+    <p-button id="change-password-button" type="submit" label="變更密碼" icon="pi pi-key" [loading]="changingPassword()" />
+  </div>
+</form>

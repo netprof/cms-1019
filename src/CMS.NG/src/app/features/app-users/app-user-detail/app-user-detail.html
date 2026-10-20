@@ -1,0 +1,38 @@
+<p-toast />
+
+<div class="page-header">
+  <h1>檢視使用者</h1>
+  <div class="actions">
+    <p-button id="back-button" label="返回" icon="pi pi-arrow-left" severity="secondary" (onClick)="back()" />
+    @if (user()) {
+      <app-reset-password-button [userId]="user()!.userId" (reset)="reloadUser()" />
+      <p-button id="edit-button" label="編輯" icon="pi pi-pencil" (onClick)="edit()" />
+    }
+  </div>
+</div>
+
+@if (user(); as u) {
+  <div class="card">
+    <h2>使用者資料</h2>
+    <dl>
+      <dt>主代碼</dt><dd>{{ u.pkid }}</dd>
+      <dt>帳號</dt><dd>{{ u.userId }}</dd>
+      <dt>使用者名稱</dt><dd>{{ u.userName }}</dd>
+      <dt>啟用</dt>
+      <dd><p-tag [value]="u.isActive ? '啟用' : '停用'" [severity]="u.isActive ? 'success' : 'secondary'" /></dd>
+      <dt>密碼更新時間</dt>
+      <dd id="password-updated-time">{{ u.passwordUpdatedTime ? (u.passwordUpdatedTime + 'Z' | date: 'yyyy-MM-dd HH:mm') : '—' }}</dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h2>角色（{{ u.roleCount }}）</h2>
+    <div class="chips">
+      @for (r of assignedRoles(); track r) {
+        <p-tag [value]="r" severity="secondary" />
+      } @empty {
+        <span>沒有角色</span>
+      }
+    </div>
+  </div>
+}

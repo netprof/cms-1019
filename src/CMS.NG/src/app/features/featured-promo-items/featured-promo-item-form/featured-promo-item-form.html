@@ -1,0 +1,45 @@
+<form class="inline-form" [formGroup]="form" (ngSubmit)="save()">
+  <div class="field">
+    <label for="promotion-{{ slot() }}">PromoCode<span class="req">*</span></label>
+    <p-autocomplete
+      inputId="promotion-{{ slot() }}"
+      formControlName="promotion"
+      [suggestions]="suggestions()"
+      optionLabel="promoCode"
+      [minLength]="1"
+      [delay]="250"
+      [forceSelection]="true"
+      placeholder="輸入 PromoCode 搜尋"
+      appendTo="body"
+      (completeMethod)="searchPromotions($event)"
+      (onSelect)="onPromotionSelect($event)"
+      [style]="{ width: '100%' }"
+      [inputStyle]="{ width: '100%' }"
+    >
+      <ng-template #item let-p>
+        <div>
+          <b>{{ p.promoCode }}</b>
+          <small style="margin-left: 0.5rem; color: #6b7280">{{ p.topic }}</small>
+        </div>
+      </ng-template>
+    </p-autocomplete>
+    @if (invalid('promotion')) { <small class="error">請輸入 PromoCode 並從清單中選擇</small> }
+  </div>
+
+  <div class="field">
+    <label for="topic-{{ slot() }}">Topic<span class="req">*</span></label>
+    <input pInputText id="topic-{{ slot() }}" formControlName="topic" maxlength="100" />
+    @if (invalid('topic')) { <small class="error">請輸入 Topic（最多 100 字）</small> }
+  </div>
+
+  <div class="field">
+    <label for="description-{{ slot() }}">Description<span class="req">*</span></label>
+    <input pInputText id="description-{{ slot() }}" formControlName="description" maxlength="300" />
+    @if (invalid('description')) { <small class="error">請輸入 Description（最多 300 字）</small> }
+  </div>
+
+  <div class="actions">
+    <p-button class="save-button" type="submit" label="儲存" icon="pi pi-check" size="small" [loading]="saving()" />
+    <p-button class="cancel-button" label="取消" icon="pi pi-times" size="small" severity="secondary" (onClick)="cancel()" />
+  </div>
+</form>

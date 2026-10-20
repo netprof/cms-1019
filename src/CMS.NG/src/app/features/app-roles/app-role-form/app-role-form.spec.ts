@@ -6,6 +6,7 @@ import { of, throwError } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { AppRole, AppUserLookup } from '../app-role.model';
 import { AppRoleService } from '../app-role.service';
+import { expectStickyToolbar } from '../../../core/testing/sticky-toolbar';
 import { AppRoleForm } from './app-role-form';
 
 const users: AppUserLookup[] = [
@@ -46,6 +47,14 @@ describe('AppRoleForm', () => {
     fixture.detectChanges();
     return fixture;
   }
+
+  it('pins the Save/Cancel toolbar to the top of the page when adding', async () => {
+    expectStickyToolbar((await setup(null)).nativeElement);
+  });
+
+  it('pins the Save/Cancel toolbar to the top of the page when editing', async () => {
+    expectStickyToolbar((await setup('Admin')).nativeElement);
+  });
 
   describe('add', () => {
     let component: AppRoleForm;

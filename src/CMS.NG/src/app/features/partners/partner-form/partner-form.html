@@ -1,0 +1,63 @@
+<p-toast />
+
+<form [formGroup]="form" (ngSubmit)="save()">
+  <div class="page-header sticky-toolbar" id="form-toolbar">
+    <h1>{{ isEdit ? '編輯合作廠商' : '新增合作廠商' }}</h1>
+    <div class="actions">
+      <p-button id="cancel-button" label="取消" icon="pi pi-times" severity="secondary" (onClick)="cancel()" />
+      <p-button id="save-button" type="submit" label="儲存" icon="pi pi-check" [loading]="saving()" />
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>合作廠商資料</h2>
+
+    @if (isEdit) {
+      <div class="field">
+        <label for="pkid">主代碼</label>
+        <input pInputText id="pkid" [value]="pkid" disabled />
+      </div>
+    }
+
+    <div class="field">
+      <label for="name">廠商名稱<span class="req">*</span></label>
+      <input pInputText id="name" formControlName="name" maxlength="50" />
+      @if (invalid('name')) { <small class="error">請輸入廠商名稱（最多 50 字）</small> }
+    </div>
+
+    <div class="field">
+      <label for="appKey">關鍵字<span class="req">*</span></label>
+      <input pInputText id="appKey" formControlName="appKey" maxlength="10" placeholder="英數代碼，最多 10 字" />
+      @if (invalid('appKey')) { <small class="error">請輸入關鍵字（最多 10 字）</small> }
+    </div>
+
+    <div class="field">
+      <label for="nameOnPartnerMenu">選單顯示名稱<span class="req">*</span></label>
+      <input pInputText id="nameOnPartnerMenu" formControlName="nameOnPartnerMenu" maxlength="200" />
+      @if (invalid('nameOnPartnerMenu')) { <small class="error">請輸入選單顯示名稱（最多 200 字）</small> }
+    </div>
+
+    <div class="field">
+      <label for="nameOnCourseDetailPage">課程頁顯示名稱<span class="req">*</span></label>
+      <input pInputText id="nameOnCourseDetailPage" formControlName="nameOnCourseDetailPage" maxlength="50" />
+      @if (invalid('nameOnCourseDetailPage')) { <small class="error">請輸入課程頁顯示名稱（最多 50 字）</small> }
+    </div>
+
+    <div class="field">
+      <label for="displayOrder">顯示順序<span class="req">*</span></label>
+      <p-inputnumber
+        inputId="displayOrder"
+        formControlName="displayOrder"
+        [useGrouping]="false"
+        [style]="{ width: '100%' }"
+      />
+      @if (invalid('displayOrder')) { <small class="error">請輸入顯示順序</small> }
+    </div>
+
+    <div class="field">
+      <label for="imageFilename">圖片檔名</label>
+      <input pInputText id="imageFilename" formControlName="imageFilename" maxlength="50" placeholder="例如 partner.png" />
+      @if (invalid('imageFilename')) { <small class="error">圖片檔名最多 50 字</small> }
+    </div>
+  </div>
+</form>

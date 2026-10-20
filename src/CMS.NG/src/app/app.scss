@@ -92,3 +92,43 @@
   padding: 1.25rem;
   min-width: 0;
 }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin: -0.5rem 0 0.75rem;
+  color: #4b5563;
+
+  .pi-user {
+    margin-right: 0.25rem;
+  }
+}
+
+.user-link {
+  color: inherit;
+  text-decoration: none;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+
+  &:hover,
+  &.active {
+    background: #eef2f7;
+  }
+}
+
+// Plain button: PrimeNG's p-button would pull its module into the initial bundle.
+.logout-btn {
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 0.3rem 0.7rem;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+
+  &:hover {
+    background: #f3f4f6;
+  }
+}

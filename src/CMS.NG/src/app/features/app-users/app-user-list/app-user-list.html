@@ -1,0 +1,117 @@
+<p-toast />
+<p-confirmdialog />
+
+<div class="page-header">
+  <h1>使用者 AppUser <small>系統登入帳號</small></h1>
+  <div class="actions">
+    <p-button
+      id="filter-button"
+      label="搜尋條件"
+      icon="pi pi-filter"
+      [severity]="hasFilters ? 'primary' : 'secondary'"
+      [outlined]="hasFilters"
+      (onClick)="drawerVisible.set(true)"
+    />
+    <p-button id="add-button" label="新增" icon="pi pi-plus" (onClick)="add()" />
+  </div>
+</div>
+
+<div class="card">
+  <p-table
+    [value]="users()"
+    [loading]="loading()"
+    [paginator]="true"
+    [rows]="page.rows"
+    [first]="page.first"
+    [rowsPerPageOptions]="[10, 20, 50]"
+    [showCurrentPageReport]="true"
+    currentPageReportTemplate="{first}–{last} 筆，共 {totalRecords} 筆"
+    [sortField]="sort.field"
+    [sortOrder]="sort.order"
+    (onSort)="onSort($event)"
+    (onPage)="onPage($event)"
+    [tableStyle]="{ 'min-width': '60rem' }"
+  >
+    <ng-template #header>
+      <tr>
+        <th pSortableColumn="pkid" style="width: 6rem">主代碼 <p-sortIcon field="pkid" /></th>
+        <th pSortableColumn="userId">帳號 <p-sortIcon field="userId" /></th>
+        <th pSortableColumn="userName">使用者名稱 <p-sortIcon field="userName" /></th>
+        <th pSortableColumn="isActive" style="width: 6rem; text-align: center">啟用 <p-sortIcon field="isActive" /></th>
+        <th pSortableColumn="passwordUpdatedTime" style="width: 11rem">密碼更新時間 <p-sortIcon field="passwordUpdatedTime" /></th>
+        <th pSortableColumn="roleCount" style="width: 7rem">角色數 <p-sortIcon field="roleCount" /></th>
+        <th style="width: 9rem; text-align: center">操作</th>
+      </tr>
+    </ng-template>
+    <ng-template #body let-u>
+      <tr>
+        <td>{{ u.pkid }}</td>
+        <td>{{ u.userId }}</td>
+        <td>{{ u.userName }}</td>
+        <td style="text-align: center">
+          <p-tag [value]="u.isActive ? '啟用' : '停用'" [severity]="u.isActive ? 'success' : 'secondary'" />
+        </td>
+        <td>{{ u.passwordUpdatedTime ? (u.passwordUpdatedTime + 'Z' | date: 'yyyy-MM-dd HH:mm') : '—' }}</td>
+        <td style="text-align: center">{{ u.roleCount }}</td>
+        <td style="text-align: center">
+          <p-button icon="pi pi-eye" [text]="true" severity="secondary" ariaLabel="檢視" (onClick)="view(u)" />
+          <p-button icon="pi pi-pencil" [text]="true" ariaLabel="編輯" (onClick)="edit(u)" />
+          <p-button icon="pi pi-trash" [text]="true" severity="danger" ariaLabel="刪除" (onClick)="remove(u)" />
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template #emptymessage>
+      <tr>
+        <td colspan="7" style="text-align: center">沒有符合的資料</td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>
+
+<p-drawer header="搜尋條件" position="right" [visible]="drawerVisible()" (visibleChange)="drawerVisible.set($event)">
+  <div class="field">
+    <label for="f-keyword">關鍵字</label>
+    <input pInputText id="f-keyword" [(ngModel)]="filters.keyword" placeholder="帳號或使用者名稱" (keyup.enter)="applyFilters()" />
+  </div>
+  <div class="field">
+    <label for="f-isActive">啟用</label>
+    <p-select
+      inputId="f-isActive"
+      [(ngModel)]="filters.isActive"
+      [options]="activeOptions"
+      optionLabel="label"
+      optionValue="value"
+      placeholder="全部"
+      [showClear]="true"
+      appendTo="body"
+      [style]="{ width: '100%' }"
+    />
+  </div>
+  <div class="field">
+    <label for="f-roleId">角色</label>
+    <p-select
+      inputId="f-roleId"
+      [(ngModel)]="filters.roleId"
+      [options]="roleOptions"
+      optionLabel="label"
+      optionValue="roleId"
+      placeholder="全部"
+      [showClear]="true"
+      [filter]="roleOptions.length >= 10"
+      appendTo="body"
+      [style]="{ width: '100%' }"
+    />
+  </div>
+  <div class="field">
+    <label for="f-passwordUpdatedFrom">密碼更新時間（起）</label>
+    <p-datepicker inputId="f-passwordUpdatedFrom" [(ngModel)]="dates.passwordUpdatedFrom" dateFormat="yy-mm-dd" [showIcon]="true" [showClear]="true" appendTo="body" [style]="{ width: '100%' }" />
+  </div>
+  <div class="field">
+    <label for="f-passwordUpdatedTo">密碼更新時間（迄）</label>
+    <p-datepicker inputId="f-passwordUpdatedTo" [(ngModel)]="dates.passwordUpdatedTo" dateFormat="yy-mm-dd" [showIcon]="true" [showClear]="true" appendTo="body" [style]="{ width: '100%' }" />
+  </div>
+  <div class="actions" style="display: flex; gap: 0.5rem">
+    <p-button label="搜尋" icon="pi pi-search" (onClick)="applyFilters()" />
+    <p-button label="清除" icon="pi pi-times" severity="secondary" (onClick)="clearFilters()" />
+  </div>
+</p-drawer>

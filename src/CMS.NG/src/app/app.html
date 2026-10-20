@@ -1,3 +1,4 @@
+@if (auth.profile(); as profile) {
 <div class="layout" [class.collapsed]="collapsed()">
   <aside class="sidebar">
     <div class="brand">
@@ -8,7 +9,7 @@
     </div>
 
     <nav>
-      @for (group of navGroups; track group.label) {
+      @for (group of visibleNavGroups(); track group.label) {
         <button type="button" class="nav-group" (click)="toggleGroup(group.label)">
           <i class="pi {{ group.icon }}"></i>
           <span class="label">{{ group.label }}</span>
@@ -27,6 +28,16 @@
   </aside>
 
   <main class="content">
+    <header class="topbar">
+      <a id="my-profile-link" class="user-link" routerLink="/profile" routerLinkActive="active" title="我的資料 My Profile">
+        <i class="pi pi-user"></i> <span id="signed-in-user">{{ profile.userName }}</span>
+      </a>
+      <button type="button" id="logout-button" class="logout-btn" (click)="auth.logout()"><i class="pi pi-sign-out"></i> 登出</button>
+    </header>
     <router-outlet />
   </main>
 </div>
+} @else {
+  <!-- Signed out: only the login page renders, without the shell. -->
+  <router-outlet />
+}

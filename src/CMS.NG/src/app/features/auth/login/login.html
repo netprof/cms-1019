@@ -1,0 +1,29 @@
+<form class="card" [formGroup]="form" (ngSubmit)="submit()">
+  <h1>CMS 登入</h1>
+
+  @if (error()) {
+    <p-message id="login-error" severity="error" [text]="error()!" />
+  }
+
+  <div class="field">
+    <label for="userId">帳號<span class="req">*</span></label>
+    <input pInputText id="userId" formControlName="userId" autocomplete="username" autofocus />
+    @if (invalid('userId')) { <small class="error">請輸入帳號</small> }
+  </div>
+
+  <div class="field">
+    <label for="password">密碼<span class="req">*</span></label>
+    <p-password
+      inputId="password"
+      formControlName="password"
+      [feedback]="false"
+      [toggleMask]="true"
+      autocomplete="current-password"
+      [style]="{ width: '100%' }"
+      [inputStyle]="{ width: '100%' }"
+    />
+    @if (invalid('password')) { <small class="error">請輸入密碼</small> }
+  </div>
+
+  <p-button id="login-button" type="submit" label="登入" icon="pi pi-sign-in" [loading]="submitting()" [style]="{ width: '100%' }" />
+</form>
