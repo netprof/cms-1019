@@ -8,7 +8,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
-import { parseIso, toIso } from '../../../core/utils/date.util';
+import { parseIso, taipeiToday, toIso } from '../../../core/utils/date.util';
 import {
   AppUserLookup,
   TokenUsageReport as Report,
@@ -63,9 +63,9 @@ function save(key: string, value: unknown) {
   }
 }
 
-/** The 1st of this month through today (local dates), no other filters. */
+/** The 1st of this month through today, in Taipei dates (as `UsageDate` is), no other filters. */
 function defaultFilters(): TokenUsageReportFilters {
-  const today = new Date();
+  const today = taipeiToday();
   return {
     from: toIso(new Date(today.getFullYear(), today.getMonth(), 1)),
     to: toIso(today),
@@ -73,6 +73,20 @@ function defaultFilters(): TokenUsageReportFilters {
     project: null,
     model: null,
   };
+}
+
+/**
+ * Saved filters over today's defaults. The date range is saved only when it differs from the
+ * default, so an untouched "this month to date" keeps following today after midnight.
+ */
+function loadFilters(): TokenUsageReportFilters {
+  return { ...defaultFilters(), ...load<Partial<TokenUsageReportFilters>>(FILTERS_KEY, {}) };
+}
+
+function saveFilters(filters: TokenUsageReportFilters) {
+  const defaults = defaultFilters();
+  const { from, to, ...rest } = filters;
+  save(FILTERS_KEY, from === defaults.from && to === defaults.to ? rest : filters);
 }
 
 const emptyTotals: TokenUsageTotals = {
@@ -133,7 +147,7 @@ export class TokenUsageReport implements OnInit {
   readonly loading = signal(false);
   readonly users = signal<AppUserLookup[]>([]);
 
-  filters: TokenUsageReportFilters = load<TokenUsageReportFilters>(FILTERS_KEY, defaultFilters());
+  filters: TokenUsageReportFilters = loadFilters();
   dates: DateFilters = { from: null, to: null };
   sort: SortState = load<SortState>(SORT_KEY, { field: 'usageDate', order: -1 });
   page: PageState = load<PageState>(PAGE_KEY, { first: 0, rows: 20 });
@@ -200,7 +214,7 @@ export class TokenUsageReport implements OnInit {
       project: text(this.filters.project),
       model: text(this.filters.model),
     };
-    save(FILTERS_KEY, this.filters);
+    saveFilters(this.filters);
     this.page = { ...this.page, first: 0 };
     save(PAGE_KEY, this.page);
     this.fetch();

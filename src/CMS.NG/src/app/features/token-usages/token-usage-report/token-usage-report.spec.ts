@@ -55,7 +55,7 @@ describe('TokenUsageReport', () => {
   beforeEach(() => {
     sessionStorage.clear();
     jasmine.clock().install();
-    jasmine.clock().mockDate(new Date(2026, 9, 20, 9, 30)); // 2026-10-20 local
+    jasmine.clock().mockDate(new Date(Date.UTC(2026, 9, 20, 1, 30))); // 2026-10-20 09:30 in Taipei
   });
 
   afterEach(() => {
@@ -145,6 +145,44 @@ describe('TokenUsageReport', () => {
       expect(JSON.parse(sessionStorage.getItem('tokenusage-report-sort')!)).toEqual({ field: 'tokenIn', order: 1 });
       expect(JSON.parse(sessionStorage.getItem('tokenusage-report-page')!)).toEqual({ first: 20, rows: 50 });
     });
+  });
+
+  it('defaults "today" to the Taipei (UTC+8) date', async () => {
+    jasmine.clock().mockDate(new Date(Date.UTC(2026, 9, 31, 16, 30))); // Oct 31 in UTC, Nov 1 00:30 in Taipei
+
+    await setup();
+
+    expect(service.report.calls.mostRecent().args[0]).toEqual(jasmine.objectContaining({
+      from: '2026-11-01', to: '2026-11-01',
+    }));
+  });
+
+  it('a default range applied yesterday follows today, while the other saved filters stay', async () => {
+    await setup();
+    component.filters = { ...component.filters, userId: 'helen' };
+    component.applyFilters(); // dates still the default 2026-10-01..2026-10-20
+    TestBed.resetTestingModule();
+    jasmine.clock().mockDate(new Date(Date.UTC(2026, 9, 21, 1, 0))); // next day in Taipei
+
+    await setup();
+
+    expect(service.report.calls.mostRecent().args[0]).toEqual(jasmine.objectContaining({
+      from: '2026-10-01', to: '2026-10-21', userId: 'helen',
+    }));
+  });
+
+  it('a range the user picked survives the next day', async () => {
+    await setup();
+    component.dates = { from: new Date(2026, 9, 5), to: new Date(2026, 9, 20) };
+    component.applyFilters();
+    TestBed.resetTestingModule();
+    jasmine.clock().mockDate(new Date(Date.UTC(2026, 9, 21, 1, 0)));
+
+    await setup();
+
+    expect(service.report.calls.mostRecent().args[0]).toEqual(jasmine.objectContaining({
+      from: '2026-10-05', to: '2026-10-20',
+    }));
   });
 
   it('restores saved filters, sort and page', async () => {
