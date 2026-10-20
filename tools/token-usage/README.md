@@ -2,9 +2,10 @@
 
 `TokenUsageHook.ps1` is a Claude Code `SessionEnd` hook for Windows PowerShell 5.1. When a session ends it reads the session transcript plus its subagent transcripts, totals token usage per Taipei date (fixed UTC+8) and model, and posts one report to the CMS ingest endpoint `POST /api/tokenusages`.
 
-- Assistant entries are de-duplicated by `message.id` (each content block repeats the same usage), and `<synthetic>` entries are skipped.
+- Assistant entries are de-duplicated by `message.id`: each content block of a reply is its own line repeating the reply's usage, but a streamed reply's earlier lines can carry a partial `output_tokens`, so the hook keeps the largest value of each usage field per `message.id`. `<synthetic>` entries are skipped.
 - The project is the git remote's `owner/repo` (origin first), or the folder name when there is no remote.
 - If the POST fails, the payload is written to a spool folder. The next session end re-sends spooled payloads first and deletes each one once the API accepts it. When the API cannot be reached, re-sending stops after the first attempt, so a down API costs one 5-second timeout.
+- A payload the API rejects with HTTP 400 goes to the spool's `rejected\` subfolder instead and is never re-sent (see below).
 - The hook always exits 0 and never blocks the session. Problems go to a log file.
 
 ## Install
@@ -66,7 +67,7 @@
 
 `<claude dir>` is `%CLAUDE_CONFIG_DIR%` when set, otherwise `%USERPROFILE%\.claude`.
 
-A payload the API rejects (for example HTTP 400 for an inactive user, or 401 for a wrong key) stays in the spool and is retried at every session end. Fix the cause, or delete the file from the spool folder.
+A payload rejected with HTTP 401 (wrong or missing key) stays in the spool and is retried at every session end, so fixing `apiKey` in the config is enough. A payload rejected with HTTP 400 (for example an inactive or unknown user) is moved to `<spool folder>\rejected\` and logged; it is never retried, because the same payload would fail again. Fix the cause, then move the file back into the spool folder to have it re-sent, or delete it.
 
 To try the hook by hand without ending a session, pipe a hook-style JSON into it:
 

@@ -82,6 +82,25 @@ Describe 'ConvertTo-TokenUsageReport' {
         $report.rows[0].outputTokens | Should Be 8
     }
 
+    It 'takes the largest usage of each field when a streamed reply''s lines report partial usage' {
+        # Real transcripts: earlier content-block lines of one reply carry a partial output_tokens.
+        $t = New-Transcript "$TestDrive\partial.jsonl" @(
+            (New-AssistantLine -Id 'msg_s' -In 2 -Cw5m 1775 -Read 53099 -Out 8),
+            (New-AssistantLine -Id 'msg_s' -In 2 -Cw5m 1775 -Read 53099 -Out 8),
+            (New-AssistantLine -Id 'msg_s' -In 2 -Cw5m 1775 -Read 53099 -Out 4538),
+            (New-AssistantLine -Id 'msg_t' -In 1 -Read 10 -Out 142),
+            (New-AssistantLine -Id 'msg_t' -In 1 -Read 10 -Out 37)
+        )
+
+        $report = ConvertTo-TokenUsageReport -TranscriptPaths $t -Cwd $cwd -SessionId 's' -UserId 'u'
+
+        @($report.rows).Count | Should Be 1
+        $report.rows[0].inputTokens | Should Be 3
+        $report.rows[0].cacheWrite5mTokens | Should Be 1775
+        $report.rows[0].cacheReadTokens | Should Be 53109
+        $report.rows[0].outputTokens | Should Be 4680
+    }
+
     It 'skips entries whose model is <synthetic>' {
         $t = New-Transcript "$TestDrive\synthetic.jsonl" @(
             (New-AssistantLine -Id 'msg_real' -In 4 -Out 6),
@@ -212,11 +231,11 @@ Describe 'Invoke-TokenUsageHook' {
         $path
     }
 
-    function New-RecordingSender([bool]$Ok, [bool]$Reachable = $true) {
+    function New-RecordingSender([bool]$Ok, [bool]$Reachable = $true, $Status = $null) {
         $calls = New-Object System.Collections.ArrayList
         $sender = { param($Url, $ApiKey, $Body)
             [void]$calls.Add([pscustomobject]@{ Url = $Url; ApiKey = $ApiKey; Body = $Body })
-            [pscustomobject]@{ Ok = $Ok; Reachable = $Reachable; Message = 'fake' }
+            [pscustomobject]@{ Ok = $Ok; Reachable = $Reachable; Status = $Status; Message = 'fake' }
         }.GetNewClosure()
         [pscustomobject]@{ Calls = $calls; Sender = $sender }
     }
@@ -314,6 +333,47 @@ Describe 'Invoke-TokenUsageHook' {
 
             $down.Calls.Count | Should Be 1
             @(Get-ChildItem $s -Filter '*.json').Count | Should Be 4
+        }
+
+        It 'moves a payload the API rejects with HTTP 400 to rejected\ and logs it' {
+            $s = Join-Path $TestDrive 'spool-400'
+            $l = Join-Path $TestDrive 'spool-400.log'
+            $bad = New-RecordingSender $false $true 400
+
+            Invoke-TokenUsageHook -HookInput $hookInput -ConfigPath $config -SpoolDir $s -LogPath $l -Sender $bad.Sender
+
+            @(Get-ChildItem $s -Filter '*.json' -File).Count | Should Be 0
+            $rejected = @(Get-ChildItem (Join-Path $s 'rejected') -Filter '*.json' -File)
+            $rejected.Count | Should Be 1
+            ([IO.File]::ReadAllText($rejected[0].FullName) | ConvertFrom-Json).sessionId | Should Be 'sess-h'
+            (Get-Content $l) -join "`n" | Should Match 'rejected'
+        }
+
+        It 'moves a spooled payload rejected with HTTP 400 to rejected\ and never re-sends it' {
+            $s = Join-Path $TestDrive 'spool-400-resend'
+            $earlier = @{ session_id = 'sess-old'; transcript_path = $transcript; cwd = $cwd } | ConvertTo-Json -Compress
+            Invoke-TokenUsageHook -HookInput $earlier -ConfigPath $config -SpoolDir $s -LogPath $log -Sender (New-RecordingSender $false $false).Sender
+
+            Invoke-TokenUsageHook -HookInput $hookInput -ConfigPath $config -SpoolDir $s -LogPath $log -Sender (New-RecordingSender $false $true 400).Sender
+            $up = New-RecordingSender $true
+            Invoke-TokenUsageHook -HookInput $hookInput -ConfigPath $config -SpoolDir $s -LogPath $log -Sender $up.Sender
+
+            $up.Calls.Count | Should Be 1
+            @(Get-ChildItem $s -Filter '*.json' -File).Count | Should Be 0
+            @(Get-ChildItem (Join-Path $s 'rejected') -Filter '*.json' -File).Count | Should Be 2
+        }
+
+        It 'keeps a payload rejected with HTTP 401 in the spool for retry' {
+            $s = Join-Path $TestDrive 'spool-401'
+            $unauthorized = New-RecordingSender $false $true 401
+
+            Invoke-TokenUsageHook -HookInput $hookInput -ConfigPath $config -SpoolDir $s -LogPath $log -Sender $unauthorized.Sender
+            $up = New-RecordingSender $true
+            Invoke-TokenUsageHook -HookInput $hookInput -ConfigPath $config -SpoolDir $s -LogPath $log -Sender $up.Sender
+
+            $up.Calls.Count | Should Be 2
+            @(Get-ChildItem $s -Filter '*.json' -File).Count | Should Be 0
+            Test-Path (Join-Path $s 'rejected') | Should Be $false
         }
     }
 }

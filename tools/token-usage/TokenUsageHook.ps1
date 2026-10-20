@@ -64,8 +64,10 @@ function ConvertTo-TokenUsageReport {
         [Parameter(Mandatory)][string]$UserId
     )
 
-    $groups = [ordered]@{}
-    $seenIds = New-Object System.Collections.Generic.HashSet[string]
+    # Each content block of one reply is its own line repeating the reply's usage, but a streamed
+    # reply's earlier lines can carry a partial output_tokens. Keep, per message.id, the largest
+    # value of each field (in real transcripts that is the reply's last line).
+    $messages = [ordered]@{}
     foreach ($path in $TranscriptPaths) {
         foreach ($line in [System.IO.File]::ReadLines($path, [Text.Encoding]::UTF8)) {
             # Cheap pre-filter: user/tool-result lines can be large and never carry usage.
@@ -77,29 +79,45 @@ function ConvertTo-TokenUsageReport {
             if (-not $usage -or -not $message.id -or -not $entry.timestamp) { continue }
             # Claude Code's own placeholder replies (errors, interrupts) carry no real usage.
             if ($message.model -eq '<synthetic>') { continue }
-            # Each content block of one reply is its own line repeating the same usage.
-            if (-not $seenIds.Add([string]$message.id)) { continue }
-            $date = ConvertTo-TaipeiDate $entry.timestamp
-            $key = "$date|$($message.model)"
-            if (-not $groups.Contains($key)) {
-                $groups[$key] = [ordered]@{
-                    date = $date; model = [string]$message.model
+            if ($usage.cache_creation) {
+                $cw5m = [long]$usage.cache_creation.ephemeral_5m_input_tokens
+                $cw1h = [long]$usage.cache_creation.ephemeral_1h_input_tokens
+            } else {
+                # Older transcripts only have the total, which was always the 5-minute TTL.
+                $cw5m = [long]$usage.cache_creation_input_tokens
+                $cw1h = [long]0
+            }
+            $id = [string]$message.id
+            if (-not $messages.Contains($id)) {
+                # The first line's timestamp dates the reply.
+                $messages[$id] = [ordered]@{
+                    date = ConvertTo-TaipeiDate $entry.timestamp; model = [string]$message.model
                     inputTokens = [long]0; cacheWrite5mTokens = [long]0; cacheWrite1hTokens = [long]0
                     cacheReadTokens = [long]0; outputTokens = [long]0
                 }
             }
-            $row = $groups[$key]
-            $row.inputTokens += [long]$usage.input_tokens
-            if ($usage.cache_creation) {
-                $row.cacheWrite5mTokens += [long]$usage.cache_creation.ephemeral_5m_input_tokens
-                $row.cacheWrite1hTokens += [long]$usage.cache_creation.ephemeral_1h_input_tokens
-            } else {
-                # Older transcripts only have the total, which was always the 5-minute TTL.
-                $row.cacheWrite5mTokens += [long]$usage.cache_creation_input_tokens
-            }
-            $row.cacheReadTokens += [long]$usage.cache_read_input_tokens
-            $row.outputTokens += [long]$usage.output_tokens
+            $m = $messages[$id]
+            $m.inputTokens = [Math]::Max($m.inputTokens, [long]$usage.input_tokens)
+            $m.cacheWrite5mTokens = [Math]::Max($m.cacheWrite5mTokens, $cw5m)
+            $m.cacheWrite1hTokens = [Math]::Max($m.cacheWrite1hTokens, $cw1h)
+            $m.cacheReadTokens = [Math]::Max($m.cacheReadTokens, [long]$usage.cache_read_input_tokens)
+            $m.outputTokens = [Math]::Max($m.outputTokens, [long]$usage.output_tokens)
         }
+    }
+
+    $fields = 'inputTokens', 'cacheWrite5mTokens', 'cacheWrite1hTokens', 'cacheReadTokens', 'outputTokens'
+    $groups = [ordered]@{}
+    foreach ($m in $messages.Values) {
+        $key = "$($m.date)|$($m.model)"
+        if (-not $groups.Contains($key)) {
+            $groups[$key] = [ordered]@{
+                date = $m.date; model = $m.model
+                inputTokens = [long]0; cacheWrite5mTokens = [long]0; cacheWrite1hTokens = [long]0
+                cacheReadTokens = [long]0; outputTokens = [long]0
+            }
+        }
+        $row = $groups[$key]
+        foreach ($f in $fields) { $row[$f] += $m[$f] }
     }
 
     [pscustomobject]@{
@@ -165,7 +183,10 @@ function Invoke-TokenUsageHook {
         $result = if ($reachable) { Invoke-Sender $Sender $config $body } else {
             [pscustomobject]@{ Ok = $false; Reachable = $false; Message = 'API unreachable while re-sending the spool' }
         }
-        if (-not $result.Ok) {
+        if (Test-Rejected $result) {
+            Save-SpooledPayload -SpoolDir (Join-Path $SpoolDir 'rejected') -SessionId $report.sessionId -Body $body
+            Write-HookLog $LogPath "Session $($report.sessionId) rejected, moved to rejected\ (not retried): $($result.Message)"
+        } elseif (-not $result.Ok) {
             Save-SpooledPayload -SpoolDir $SpoolDir -SessionId $report.sessionId -Body $body
             Write-HookLog $LogPath "Session $($report.sessionId) spooled: $($result.Message)"
         }
@@ -174,8 +195,15 @@ function Invoke-TokenUsageHook {
     }
 }
 
+# HTTP 400 means the payload itself is bad (e.g. inactive user): re-sending it can never succeed.
+# 401 (wrong key) and network failures are fixable outside the payload, so those are retried.
+function Test-Rejected {
+    param($Result)
+    -not $Result.Ok -and $Result.Status -eq 400
+}
+
 # The real sender: POST with X-Api-Key and a 5-second timeout.
-# Reachable is $false when no HTTP response came back (API down, timeout, DNS).
+# Reachable is $false when no HTTP response came back (API down, timeout, DNS); Status is the HTTP status or $null.
 function Send-TokenUsagePayload {
     param([string]$Url, [string]$ApiKey, [string]$Body)
     try {
@@ -183,7 +211,7 @@ function Send-TokenUsagePayload {
         $bytes = [Text.Encoding]::UTF8.GetBytes($Body)
         $response = Invoke-WebRequest -Uri $Url -Method Post -UseBasicParsing -TimeoutSec 5 `
             -Headers @{ 'X-Api-Key' = $ApiKey } -ContentType 'application/json; charset=utf-8' -Body $bytes
-        [pscustomobject]@{ Ok = $true; Reachable = $true; Message = "HTTP $([int]$response.StatusCode)" }
+        [pscustomobject]@{ Ok = $true; Reachable = $true; Status = [int]$response.StatusCode; Message = "HTTP $([int]$response.StatusCode)" }
     } catch [System.Net.WebException] {
         $httpResponse = $_.Exception.Response
         if ($httpResponse) {
@@ -193,7 +221,7 @@ function Send-TokenUsagePayload {
                 $detail = $reader.ReadToEnd()
                 if ($detail.Length -gt 500) { $detail = $detail.Substring(0, 500) }
             } catch { }
-            [pscustomobject]@{ Ok = $false; Reachable = $true; Message = "HTTP $([int]$httpResponse.StatusCode) $detail" }
+            [pscustomobject]@{ Ok = $false; Reachable = $true; Status = [int]$httpResponse.StatusCode; Message = "HTTP $([int]$httpResponse.StatusCode) $detail" }
         } else {
             [pscustomobject]@{ Ok = $false; Reachable = $false; Message = $_.Exception.Message }
         }
@@ -231,6 +259,11 @@ function Send-SpooledPayloads {
         $result = Invoke-Sender $Sender $Config $body
         if ($result.Ok) {
             Remove-Item -LiteralPath $file.FullName -Force
+        } elseif (Test-Rejected $result) {
+            $rejectedDir = Join-Path $SpoolDir 'rejected'
+            if (-not (Test-Path -LiteralPath $rejectedDir)) { New-Item -ItemType Directory -Path $rejectedDir -Force | Out-Null }
+            Move-Item -LiteralPath $file.FullName -Destination (Join-Path $rejectedDir $file.Name) -Force
+            Write-HookLog $LogPath "Spooled $($file.Name) rejected, moved to rejected\ (not retried): $($result.Message)"
         } else {
             Write-HookLog $LogPath "Spooled $($file.Name) not re-sent: $($result.Message)"
             if (-not $result.Reachable) { return $false }
