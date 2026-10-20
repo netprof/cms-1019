@@ -9,6 +9,9 @@ public interface IAppUserRepository
     Task<AppUser?> GetByIdAsync(string userId);
     Task<bool> ExistsAsync(string userId);
 
+    /// <returns>True if <paramref name="userId"/> exists with IsActive = 1.</returns>
+    Task<bool> IsActiveUserAsync(string userId);
+
     /// <param name="passwordHash">Hash to store; computed by the caller from the default password.</param>
     Task<AppUser> CreateAsync(AppUserRequest request, string passwordHash);
 

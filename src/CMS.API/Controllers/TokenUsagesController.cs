@@ -8,7 +8,8 @@ namespace CMS.API.Controllers;
 [ApiController]
 [Route("api/tokenusages")]
 public class TokenUsagesController(
-    ITokenUsageRepository repository, TokenCostService costService, TimeProvider timeProvider) : ControllerBase
+    ITokenUsageRepository repository, IAppUserRepository users, TokenCostService costService,
+    TimeProvider timeProvider) : ControllerBase
 {
     /// <summary>Ingests one session's usage, replacing whatever was stored for it.</summary>
     [HttpPost]
@@ -16,7 +17,7 @@ public class TokenUsagesController(
     public async Task<IActionResult> Ingest(TokenUsageIngestRequest request)
     {
         Normalize(request);
-        if (!await repository.IsActiveUserAsync(request.UserId))
+        if (!await users.IsActiveUserAsync(request.UserId))
             ModelState.AddModelError(nameof(request.UserId), $"User '{request.UserId}' does not exist or is inactive.");
         ValidateRows(request.Rows);
         if (!ModelState.IsValid) return ValidationProblem(ModelState);

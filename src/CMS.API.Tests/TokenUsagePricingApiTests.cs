@@ -23,6 +23,10 @@ public class TokenUsagePricingApiTests : IClassFixture<WebApplicationFactory<Pro
         {
             services.RemoveAll<ITokenUsageRepository>();
             services.AddSingleton<ITokenUsageRepository>(_usages);
+            services.RemoveAll<IAppUserRepository>();
+            services.AddSingleton<IAppUserRepository>(new FakeAppUserRepository());
+            services.RemoveAll<IIngestApiKeyReader>();
+            services.AddSingleton<IIngestApiKeyReader>(new FakeIngestApiKeyReader());
             services.RemoveAll<IModelPriceRepository>();
             services.AddSingleton<IModelPriceRepository>(new FakeModelPriceRepository());
         }));
@@ -46,7 +50,7 @@ public class TokenUsagePricingApiTests : IClassFixture<WebApplicationFactory<Pro
         {
             Content = JsonContent.Create(new { sessionId, userId = "helen", project = "netprof/cms", rows }),
         };
-        request.Headers.Add("X-Api-Key", FakeTokenUsageRepository.ApiKey);
+        request.Headers.Add("X-Api-Key", FakeIngestApiKeyReader.ApiKey);
         var response = await _factory.CreateClient().SendAsync(request);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }

@@ -22,6 +22,7 @@ builder.Services.AddScoped<ICourseRepository, CourseRepository>();
 builder.Services.AddScoped<IFeaturedPromoItemRepository, FeaturedPromoItemRepository>();
 builder.Services.AddScoped<IModelPriceRepository, ModelPriceRepository>();
 builder.Services.AddScoped<ITokenUsageRepository, TokenUsageRepository>();
+builder.Services.AddScoped<IIngestApiKeyReader, IngestApiKeyReader>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<TokenCostService>();
 

@@ -95,6 +95,8 @@ public class FakeAppUserRepository : IAppUserRepository
 
     public Task<bool> ExistsAsync(string userId) => Task.FromResult(Find(userId) is not null);
 
+    public Task<bool> IsActiveUserAsync(string userId) => Task.FromResult(Find(userId)?.User.IsActive == true);
+
     public Task<AppUser> CreateAsync(AppUserRequest request, string passwordHash)
     {
         var user = new AppUser

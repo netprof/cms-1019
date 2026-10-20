@@ -5,20 +5,10 @@ namespace CMS.API.Tests;
 
 public class FakeTokenUsageRepository : ITokenUsageRepository
 {
-    public const string ApiKey = "test-ingest-key";
-
     private readonly List<TokenUsage> _rows = [];
 
     /// <summary>Lets tests inspect what the controller stored.</summary>
     public IReadOnlyList<TokenUsage> Rows => _rows;
-
-    /// <summary>AppUser stand-in: helen is active, jenny is inactive.</summary>
-    private readonly Dictionary<string, bool> _users = new() { ["helen"] = true, ["jenny"] = false };
-
-    public Task<string> GetIngestApiKeyAsync() => Task.FromResult(ApiKey);
-
-    public Task<bool> IsActiveUserAsync(string userId) =>
-        Task.FromResult(_users.TryGetValue(userId, out var active) && active);
 
     /// <summary>AppUser names for the report join.</summary>
     private readonly Dictionary<string, string> _userNames = new() { ["helen"] = "Helen Wu", ["jenny"] = "Jenny Lin" };

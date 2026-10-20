@@ -8,8 +8,9 @@ namespace CMS.API.Controllers;
 
 /// <summary>
 /// Rejects the request with 401 unless its <c>X-Api-Key</c> header matches the
-/// SysConfig <c>tokenUsageConfig.apiKey</c>. Runs as an authorization filter, so
-/// it fires before model validation (an unauthenticated caller never sees a 400).
+/// SysConfig <c>tokenUsageConfig.apiKey</c> (401 with a logged warning when that key is
+/// not configured). Runs as an authorization filter, so it fires before model validation
+/// (an unauthenticated caller never sees a 400).
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public class RequireIngestApiKeyAttribute : Attribute, IAsyncAuthorizationFilter
@@ -25,8 +26,16 @@ public class RequireIngestApiKeyAttribute : Attribute, IAsyncAuthorizationFilter
             return;
         }
 
-        var repository = context.HttpContext.RequestServices.GetRequiredService<ITokenUsageRepository>();
-        var expected = await repository.GetIngestApiKeyAsync();
+        var services = context.HttpContext.RequestServices;
+        var expected = await services.GetRequiredService<IIngestApiKeyReader>().GetAsync();
+        if (expected is null)
+        {
+            // A misconfigured server rejects every caller rather than failing with 500.
+            services.GetRequiredService<ILogger<RequireIngestApiKeyAttribute>>().LogWarning(
+                "Token usage ingest rejected: SysConfig 'tokenUsageConfig' row or its apiKey is missing.");
+            context.Result = new UnauthorizedResult();
+            return;
+        }
 
         if (!CryptographicOperations.FixedTimeEquals(
                 Encoding.UTF8.GetBytes(supplied), Encoding.UTF8.GetBytes(expected)))

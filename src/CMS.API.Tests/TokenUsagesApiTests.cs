@@ -21,6 +21,10 @@ public class TokenUsagesApiTests : IClassFixture<WebApplicationFactory<Program>>
         {
             services.RemoveAll<ITokenUsageRepository>();
             services.AddSingleton<ITokenUsageRepository>(_repository);
+            services.RemoveAll<IAppUserRepository>();
+            services.AddSingleton<IAppUserRepository>(new FakeAppUserRepository());
+            services.RemoveAll<IIngestApiKeyReader>();
+            services.AddSingleton<IIngestApiKeyReader>(new FakeIngestApiKeyReader());
             services.RemoveAll<IModelPriceRepository>(); // ingest prices rows; pricing itself is in TokenUsagePricingApiTests
             services.AddSingleton<IModelPriceRepository>(new FakeModelPriceRepository());
             services.RemoveAll<TimeProvider>();
@@ -53,7 +57,7 @@ public class TokenUsagesApiTests : IClassFixture<WebApplicationFactory<Program>>
         ["rows"] = rows ?? [Row()],
     };
 
-    private async Task<HttpResponseMessage> PostAsync(object payload, string? apiKey = FakeTokenUsageRepository.ApiKey)
+    private async Task<HttpResponseMessage> PostAsync(object payload, string? apiKey = FakeIngestApiKeyReader.ApiKey)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, Route) { Content = JsonContent.Create(payload) };
         if (apiKey is not null) request.Headers.Add("X-Api-Key", apiKey);
@@ -68,6 +72,23 @@ public class TokenUsagesApiTests : IClassFixture<WebApplicationFactory<Program>>
         var response = await PostAsync(Payload(), apiKey: null);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Ingest_ApiKeyNotConfigured_Returns401()
+    {
+        var unconfigured = _factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<IIngestApiKeyReader>();
+            services.AddSingleton<IIngestApiKeyReader>(new FakeIngestApiKeyReader(apiKey: null));
+        }));
+        var request = new HttpRequestMessage(HttpMethod.Post, Route) { Content = JsonContent.Create(Payload()) };
+        request.Headers.Add("X-Api-Key", FakeIngestApiKeyReader.ApiKey);
+
+        var response = await unconfigured.CreateClient().SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Empty(_repository.Rows);
     }
 
     [Fact]
