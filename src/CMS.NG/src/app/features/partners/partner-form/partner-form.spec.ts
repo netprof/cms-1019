@@ -6,6 +6,7 @@ import { of, throwError } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { Partner } from '../partner.model';
 import { PartnerService } from '../partner.service';
+import { expectStickyToolbar } from '../../../core/testing/sticky-toolbar';
 import { PartnerForm } from './partner-form';
 
 const partner: Partner = {
@@ -40,6 +41,14 @@ describe('PartnerForm', () => {
     fixture.detectChanges();
     return fixture;
   }
+
+  it('pins the Save/Cancel toolbar to the top of the page when adding', async () => {
+    expectStickyToolbar((await setup(null)).nativeElement);
+  });
+
+  it('pins the Save/Cancel toolbar to the top of the page when editing', async () => {
+    expectStickyToolbar((await setup('2')).nativeElement);
+  });
 
   describe('add', () => {
     let fixture: ComponentFixture<PartnerForm>;

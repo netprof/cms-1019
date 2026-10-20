@@ -6,6 +6,7 @@ import { of, throwError } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { CourseGroup } from '../course-group.model';
 import { CourseGroupService } from '../course-group.service';
+import { expectStickyToolbar } from '../../../core/testing/sticky-toolbar';
 import { CourseGroupForm } from './course-group-form';
 
 const group: CourseGroup = { pkid: 2, description: '進階課程' };
@@ -37,6 +38,14 @@ describe('CourseGroupForm', () => {
     fixture.detectChanges();
     return fixture;
   }
+
+  it('pins the Save/Cancel toolbar to the top of the page when adding', async () => {
+    expectStickyToolbar((await setup(null)).nativeElement);
+  });
+
+  it('pins the Save/Cancel toolbar to the top of the page when editing', async () => {
+    expectStickyToolbar((await setup('2')).nativeElement);
+  });
 
   describe('add', () => {
     let fixture: ComponentFixture<CourseGroupForm>;

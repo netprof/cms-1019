@@ -6,6 +6,7 @@ import { of, throwError } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { PublishStatus } from '../publish-status.model';
 import { PublishStatusService } from '../publish-status.service';
+import { expectStickyToolbar } from '../../../core/testing/sticky-toolbar';
 import { PublishStatusForm } from './publish-status-form';
 
 const status: PublishStatus = {
@@ -39,6 +40,14 @@ describe('PublishStatusForm', () => {
     fixture.detectChanges();
     return fixture;
   }
+
+  it('pins the Save/Cancel toolbar to the top of the page when adding', async () => {
+    expectStickyToolbar((await setup(null)).nativeElement);
+  });
+
+  it('pins the Save/Cancel toolbar to the top of the page when editing', async () => {
+    expectStickyToolbar((await setup('2')).nativeElement);
+  });
 
   describe('add', () => {
     let component: PublishStatusForm;

@@ -36,6 +36,7 @@
   - `p-datepicker`: convert ISO string ↔ `Date` on load/save
   - `p-datepicker [timeOnly]="true"` for `time` columns; `parseTime`/`toTimeStr` helpers
   - `p-multiselect` for n-n: `[maxSelectedLabels]="9999"`; wrap chips via `::ng-deep`
+  - Save/Cancel toolbar is sticky: `<div class="page-header sticky-toolbar" id="form-toolbar">` (buttons `#save-button`, `#cancel-button`); spec calls `expectStickyToolbar()` for add and edit — see `docs\patterns.md` → Sticky form toolbar
 
   ### Sidebar nav
   - Add entry under the appropriate nav group in `app.html` / `app.ts`

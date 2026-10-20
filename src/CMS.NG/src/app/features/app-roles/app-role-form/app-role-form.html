@@ -1,7 +1,7 @@
 <p-toast />
 
 <form [formGroup]="form" (ngSubmit)="save()">
-  <div class="page-header">
+  <div class="page-header sticky-toolbar" id="form-toolbar">
     <h1>{{ isEdit ? '編輯角色' : '新增角色' }}</h1>
     <div class="actions">
       <p-button id="cancel-button" label="取消" icon="pi pi-times" severity="secondary" (onClick)="cancel()" />

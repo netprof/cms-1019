@@ -9,6 +9,7 @@ import { PartnerService } from '../../partners/partner.service';
 import { PublishStatusService } from '../../publish-statuses/publish-status.service';
 import { Course } from '../course.model';
 import { CourseService } from '../course.service';
+import { expectStickyToolbar } from '../../../core/testing/sticky-toolbar';
 import { CourseForm } from './course-form';
 
 const course: Course = {
@@ -70,17 +71,6 @@ describe('CourseForm', () => {
     });
   }
 
-  function expectStickyToolbar(fixture: ComponentFixture<CourseForm>) {
-    const toolbar = fixture.nativeElement.querySelector('#form-toolbar') as HTMLElement;
-    expect(toolbar).withContext('toolbar').not.toBeNull();
-    const style = getComputedStyle(toolbar);
-    expect(style.position).toBe('sticky');
-    expect(style.top).toBe('0px');
-    expect(Number(style.zIndex)).toBeGreaterThan(0);
-    expect(toolbar.querySelector('#save-button')).withContext('save').not.toBeNull();
-    expect(toolbar.querySelector('#cancel-button')).withContext('cancel').not.toBeNull();
-  }
-
   describe('add', () => {
     let fixture: ComponentFixture<CourseForm>;
     let component: CourseForm;
@@ -91,7 +81,7 @@ describe('CourseForm', () => {
     });
 
     it('pins the Save/Cancel toolbar to the top of the page', () => {
-      expectStickyToolbar(fixture);
+      expectStickyToolbar(fixture.nativeElement);
     });
 
     it('loads the lookups, starts with defaults, hides the pkid and does not load a record', () => {
@@ -187,7 +177,7 @@ describe('CourseForm', () => {
     });
 
     it('pins the Save/Cancel toolbar to the top of the page', () => {
-      expectStickyToolbar(fixture);
+      expectStickyToolbar(fixture.nativeElement);
     });
 
     it('loads the course into the form and shows the pkid read-only', () => {
