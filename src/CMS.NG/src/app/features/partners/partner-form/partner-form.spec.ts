@@ -8,6 +8,7 @@ import { Partner } from '../partner.model';
 import { PartnerService } from '../partner.service';
 import { expectStickyToolbar } from '../../../core/testing/sticky-toolbar';
 import { PartnerForm } from './partner-form';
+import { expectNoRowAuditBadge, expectRowAuditBadge, provideRowAuditStub } from '@app/core/testing/row-audit';
 
 const partner: Partner = {
   pkid: 2, name: 'Cisco', appKey: 'csco', nameOnPartnerMenu: 'Cisco 思科',
@@ -27,6 +28,7 @@ describe('PartnerForm', () => {
     await TestBed.configureTestingModule({
       imports: [PartnerForm],
       providers: [
+        provideRowAuditStub(),
         { provide: PartnerService, useValue: service },
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap(id ? { id } : {}) } } },
@@ -156,6 +158,16 @@ describe('PartnerForm', () => {
 
       expect(service.update).not.toHaveBeenCalled();
       expect(router.navigate).toHaveBeenCalledWith(['/partners']);
+    });
+  });
+
+  describe('異動紀錄 History badge', () => {
+    it('is hidden when adding', async () => {
+      await expectNoRowAuditBadge(await setup(null));
+    });
+
+    it('shows the history of the edited record', async () => {
+      await expectRowAuditBadge(await setup('2'), 'Partner', 2);
     });
   });
 });

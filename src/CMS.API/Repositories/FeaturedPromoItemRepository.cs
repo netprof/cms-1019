@@ -1,12 +1,15 @@
 using System.Data.Common;
 using CMS.API.Data;
 using CMS.API.Models;
+using CMS.API.Services;
 using Dapper;
 
 namespace CMS.API.Repositories;
 
-public class FeaturedPromoItemRepository(IDbConnectionFactory connectionFactory) : IFeaturedPromoItemRepository
+public class FeaturedPromoItemRepository(IDbConnectionFactory connectionFactory, RowAuditWriter audit) : IFeaturedPromoItemRepository
 {
+    private const string TableName = "FeaturedPromoItem";
+
     private const string SelectSql = """
         SELECT f.pkid AS Pkid,
                f.ScheduleOn,
@@ -80,6 +83,7 @@ public class FeaturedPromoItemRepository(IDbConnectionFactory connectionFactory)
 
     public async Task<FeaturedPromoItem> CreateAsync(FeaturedPromoItemRequest request)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
         var pkid = await conn.ExecuteScalarAsync<int>(
             """
@@ -87,13 +91,24 @@ public class FeaturedPromoItemRepository(IDbConnectionFactory connectionFactory)
             VALUES (@ScheduleOn, @TrainingCenterPkid, @Slot, @PromotionPkid, @Topic, @Description);
             SELECT CAST(SCOPE_IDENTITY() AS int);
             """, request);
-        return (await GetByIdAsync(conn, pkid))!;
+        var created = (await GetByIdAsync(conn, pkid))!;
+        await audit.LogInsertAsync(conn, TableName, created);
+        scope.Complete();
+        return created;
     }
 
     public async Task<FeaturedPromoItem?> UpdateAsync(FeaturedPromoItemRequest request)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        var rows = await conn.ExecuteAsync(
+        var before = await GetByIdAsync(conn, request.Pkid);
+        if (before is null)
+        {
+            scope.Complete(); // nothing written: leaving the scope incomplete would doom an outer transaction
+            return null;
+        }
+
+        await conn.ExecuteAsync(
             """
             UPDATE FeaturedPromoItem
             SET ScheduleOn = @ScheduleOn,
@@ -104,13 +119,27 @@ public class FeaturedPromoItemRepository(IDbConnectionFactory connectionFactory)
                 Description = @Description
             WHERE pkid = @Pkid
             """, request);
-        return rows == 0 ? null : await GetByIdAsync(conn, request.Pkid);
+        var after = (await GetByIdAsync(conn, request.Pkid))!;
+        await audit.LogUpdateAsync(conn, TableName, before, after);
+        scope.Complete();
+        return after;
     }
 
     public async Task<bool> DeleteAsync(int pkid)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        return await conn.ExecuteAsync("DELETE FROM FeaturedPromoItem WHERE pkid = @pkid", new { pkid }) > 0;
+        var row = await GetByIdAsync(conn, pkid);
+        if (row is null)
+        {
+            scope.Complete(); // nothing written: leaving the scope incomplete would doom an outer transaction
+            return false;
+        }
+
+        await conn.ExecuteAsync("DELETE FROM FeaturedPromoItem WHERE pkid = @pkid", new { pkid });
+        await audit.LogDeleteAsync(conn, TableName, row);
+        scope.Complete();
+        return true;
     }
 
     public async Task<bool> IsSlotTakenAsync(DateOnly scheduleOn, short trainingCenterPkid, byte slot, int excludePkid)
@@ -128,7 +157,15 @@ public class FeaturedPromoItemRepository(IDbConnectionFactory connectionFactory)
 
     public async Task MoveAsync(FeaturedPromoItem item, byte toSlot)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
+        var key = new { item.ScheduleOn, item.TrainingCenterPkid, fromSlot = item.Slot, toSlot };
+        const string InBothSlots = """
+             WHERE f.ScheduleOn = @ScheduleOn AND f.TrainingCenter_pkid = @TrainingCenterPkid
+               AND f.Slot IN (@fromSlot, @toSlot)
+            """;
+        var before = (await QueryItemsAsync(conn, SelectSql + InBothSlots, key)).ToList();
+
         // One statement swaps both rows, so the (ScheduleOn, TrainingCenter, Slot) unique index
         // is only checked against the final state. Works whether or not the target slot is filled.
         await conn.ExecuteAsync(
@@ -137,7 +174,12 @@ public class FeaturedPromoItemRepository(IDbConnectionFactory connectionFactory)
             SET Slot = CASE WHEN Slot = @fromSlot THEN @toSlot ELSE @fromSlot END
             WHERE ScheduleOn = @ScheduleOn AND TrainingCenter_pkid = @TrainingCenterPkid
               AND Slot IN (@fromSlot, @toSlot)
-            """, new { item.ScheduleOn, item.TrainingCenterPkid, fromSlot = item.Slot, toSlot });
+            """, key);
+
+        // One Update row ("Slot") per moved item: the item itself and the one it swapped with.
+        foreach (var row in before)
+            await audit.LogUpdateAsync(conn, TableName, row, (await GetByIdAsync(conn, row.Pkid))!);
+        scope.Complete();
     }
 
     public async Task<IEnumerable<TrainingCenterLookup>> GetTrainingCenterLookupsAsync()

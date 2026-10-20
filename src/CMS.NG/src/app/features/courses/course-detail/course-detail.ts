@@ -9,6 +9,7 @@ import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { CertificationLookup, Course, JobCategoryLookup } from '../course.model';
 import { CourseService } from '../course.service';
+import { RowAuditBadge } from '@app/shared/row-audit/row-audit-badge';
 
 /** Options shared by the on-screen QR code and the downloaded image. */
 export const QR_OPTIONS: QRCodeToDataURLOptions = { type: 'image/png', width: 200, margin: 2 };
@@ -20,7 +21,7 @@ export function courseShowUrl(course: Pick<Course, 'pkid' | 'courseId'>): string
 
 @Component({
   selector: 'app-course-detail',
-  imports: [DatePipe, DecimalPipe, RouterLink, ButtonModule, TagModule, ToastModule],
+  imports: [DatePipe, DecimalPipe, RouterLink, ButtonModule, TagModule, ToastModule, RowAuditBadge],
   templateUrl: './course-detail.html',
   styles: `
     dl {

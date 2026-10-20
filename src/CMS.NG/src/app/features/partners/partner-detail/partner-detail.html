@@ -3,6 +3,7 @@
 <div class="page-header">
   <h1>檢視合作廠商</h1>
   <div class="actions">
+    <app-row-audit-badge tableName="Partner" [pkid]="partner()?.pkid ?? null" />
     <p-button id="back-button" label="返回" icon="pi pi-arrow-left" severity="secondary" (onClick)="back()" />
     @if (partner()) {
       <p-button id="courses-button" label="查看課程" icon="pi pi-book" severity="info" [outlined]="true" (onClick)="viewCourses()" />

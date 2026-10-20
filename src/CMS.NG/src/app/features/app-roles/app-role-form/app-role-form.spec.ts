@@ -8,6 +8,7 @@ import { AppRole, AppUserLookup } from '../app-role.model';
 import { AppRoleService } from '../app-role.service';
 import { expectStickyToolbar } from '../../../core/testing/sticky-toolbar';
 import { AppRoleForm } from './app-role-form';
+import { expectNoRowAuditBadge, expectRowAuditBadge, provideRowAuditStub } from '@app/core/testing/row-audit';
 
 const users: AppUserLookup[] = [
   { userId: 'helen', userName: 'Helen' },
@@ -33,6 +34,7 @@ describe('AppRoleForm', () => {
     await TestBed.configureTestingModule({
       imports: [AppRoleForm],
       providers: [
+        provideRowAuditStub(),
         { provide: AppRoleService, useValue: service },
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap(id ? { id } : {}) } } },
@@ -137,6 +139,16 @@ describe('AppRoleForm', () => {
 
       expect(service.update).not.toHaveBeenCalled();
       expect(router.navigate).toHaveBeenCalledWith(['/app-roles']);
+    });
+  });
+
+  describe('異動紀錄 History badge', () => {
+    it('is hidden when adding', async () => {
+      await expectNoRowAuditBadge(await setup(null));
+    });
+
+    it('shows the history of the edited record', async () => {
+      await expectRowAuditBadge(await setup('Admin'), 'AppRole', 1);
     });
   });
 });

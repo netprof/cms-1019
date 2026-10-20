@@ -1,11 +1,15 @@
+using System.Data.Common;
 using CMS.API.Data;
 using CMS.API.Models;
+using CMS.API.Services;
 using Dapper;
 
 namespace CMS.API.Repositories;
 
-public class CourseGroupRepository(IDbConnectionFactory connectionFactory) : ICourseGroupRepository
+public class CourseGroupRepository(IDbConnectionFactory connectionFactory, RowAuditWriter audit) : ICourseGroupRepository
 {
+    private const string TableName = "CourseGroup";
+
     private const string SelectSql = """
         SELECT g.pkid AS Pkid,
                g.Description
@@ -42,12 +46,15 @@ public class CourseGroupRepository(IDbConnectionFactory connectionFactory) : ICo
     public async Task<CourseGroup?> GetByIdAsync(short pkid)
     {
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        return await conn.QuerySingleOrDefaultAsync<CourseGroup>(
-            $"{SelectSql} WHERE g.pkid = @pkid", new { pkid });
+        return await GetByIdAsync(conn, pkid);
     }
+
+    private static Task<CourseGroup?> GetByIdAsync(DbConnection conn, short pkid) =>
+        conn.QuerySingleOrDefaultAsync<CourseGroup>($"{SelectSql} WHERE g.pkid = @pkid", new { pkid });
 
     public async Task<CourseGroup> CreateAsync(CourseGroupRequest request)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
         var pkid = await conn.ExecuteScalarAsync<short>(
             """
@@ -56,21 +63,34 @@ public class CourseGroupRepository(IDbConnectionFactory connectionFactory) : ICo
             SELECT CAST(SCOPE_IDENTITY() AS smallint);
             """, request);
 
-        return (await GetByIdAsync(pkid))!;
+        var created = (await GetByIdAsync(conn, pkid))!;
+        await audit.LogInsertAsync(conn, TableName, created);
+        scope.Complete();
+        return created;
     }
 
     public async Task<CourseGroup?> UpdateAsync(CourseGroupRequest request)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        var rows = await conn.ExecuteAsync(
+        var before = await GetByIdAsync(conn, request.Pkid);
+        if (before is null)
+        {
+            scope.Complete(); // nothing written: leaving the scope incomplete would doom an outer transaction
+            return null;
+        }
+
+        await conn.ExecuteAsync(
             """
             UPDATE CourseGroup
             SET Description = @Description
             WHERE pkid = @Pkid
             """, request);
-        if (rows == 0) return null;
 
-        return await GetByIdAsync(request.Pkid);
+        var after = (await GetByIdAsync(conn, request.Pkid))!;
+        await audit.LogUpdateAsync(conn, TableName, before, after);
+        scope.Complete();
+        return after;
     }
 
     public async Task<bool> IsInUseAsync(short pkid)
@@ -86,9 +106,19 @@ public class CourseGroupRepository(IDbConnectionFactory connectionFactory) : ICo
 
     public async Task<bool> DeleteAsync(short pkid)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        var rows = await conn.ExecuteAsync("DELETE FROM CourseGroup WHERE pkid = @pkid", new { pkid });
-        return rows > 0;
+        var row = await GetByIdAsync(conn, pkid);
+        if (row is null)
+        {
+            scope.Complete(); // nothing written: leaving the scope incomplete would doom an outer transaction
+            return false;
+        }
+
+        await conn.ExecuteAsync("DELETE FROM CourseGroup WHERE pkid = @pkid", new { pkid });
+        await audit.LogDeleteAsync(conn, TableName, row);
+        scope.Complete();
+        return true;
     }
 
     public async Task<IEnumerable<CourseGroupLookup>> GetLookupsAsync()

@@ -3,6 +3,10 @@
 
 <div class="page-header">
   <h1>上稿作業 FeaturedPromoItem <small>首頁每日推廣項目</small></h1>
+  <div class="actions">
+    <!-- One badge for the whole tab + week, not one per slot. -->
+    <app-row-audit-badge tableName="FeaturedPromoItem" [pkids]="auditPkids()" [itemLabels]="auditLabels()" />
+  </div>
 </div>
 
 <div class="card">

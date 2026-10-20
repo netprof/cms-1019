@@ -1,11 +1,15 @@
+using System.Data.Common;
 using CMS.API.Data;
 using CMS.API.Models;
+using CMS.API.Services;
 using Dapper;
 
 namespace CMS.API.Repositories;
 
-public class PublishStatusRepository(IDbConnectionFactory connectionFactory) : IPublishStatusRepository
+public class PublishStatusRepository(IDbConnectionFactory connectionFactory, RowAuditWriter audit) : IPublishStatusRepository
 {
+    private const string TableName = "PublishStatus";
+
     private const string SelectSql = """
         SELECT s.pkid AS Pkid,
                s.Description,
@@ -58,9 +62,11 @@ public class PublishStatusRepository(IDbConnectionFactory connectionFactory) : I
     public async Task<PublishStatus?> GetByIdAsync(byte pkid)
     {
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        return await conn.QuerySingleOrDefaultAsync<PublishStatus>(
-            $"{SelectSql} WHERE s.pkid = @pkid", new { pkid });
+        return await GetByIdAsync(conn, pkid);
     }
+
+    private static Task<PublishStatus?> GetByIdAsync(DbConnection conn, byte pkid) =>
+        conn.QuerySingleOrDefaultAsync<PublishStatus>($"{SelectSql} WHERE s.pkid = @pkid", new { pkid });
 
     public async Task<bool> ExistsAsync(byte pkid)
     {
@@ -71,6 +77,7 @@ public class PublishStatusRepository(IDbConnectionFactory connectionFactory) : I
 
     public async Task<PublishStatus> CreateAsync(PublishStatusRequest request)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
         await conn.ExecuteAsync(
             """
@@ -78,13 +85,24 @@ public class PublishStatusRepository(IDbConnectionFactory connectionFactory) : I
             VALUES (@Pkid, @Description, @IsDraft, @IsPublished, @IsDiscontinued)
             """, request);
 
-        return (await GetByIdAsync(request.Pkid))!;
+        var created = (await GetByIdAsync(conn, request.Pkid))!;
+        await audit.LogInsertAsync(conn, TableName, created);
+        scope.Complete();
+        return created;
     }
 
     public async Task<PublishStatus?> UpdateAsync(PublishStatusRequest request)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        var rows = await conn.ExecuteAsync(
+        var before = await GetByIdAsync(conn, request.Pkid);
+        if (before is null)
+        {
+            scope.Complete(); // nothing written: leaving the scope incomplete would doom an outer transaction
+            return null;
+        }
+
+        await conn.ExecuteAsync(
             """
             UPDATE PublishStatus
             SET Description = @Description,
@@ -93,16 +111,28 @@ public class PublishStatusRepository(IDbConnectionFactory connectionFactory) : I
                 IsDiscontinued = @IsDiscontinued
             WHERE pkid = @Pkid
             """, request);
-        if (rows == 0) return null;
 
-        return await GetByIdAsync(request.Pkid);
+        var after = (await GetByIdAsync(conn, request.Pkid))!;
+        await audit.LogUpdateAsync(conn, TableName, before, after);
+        scope.Complete();
+        return after;
     }
 
     public async Task<bool> DeleteAsync(byte pkid)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        var rows = await conn.ExecuteAsync("DELETE FROM PublishStatus WHERE pkid = @pkid", new { pkid });
-        return rows > 0;
+        var row = await GetByIdAsync(conn, pkid);
+        if (row is null)
+        {
+            scope.Complete(); // nothing written: leaving the scope incomplete would doom an outer transaction
+            return false;
+        }
+
+        await conn.ExecuteAsync("DELETE FROM PublishStatus WHERE pkid = @pkid", new { pkid });
+        await audit.LogDeleteAsync(conn, TableName, row);
+        scope.Complete();
+        return true;
     }
 
     public async Task<IEnumerable<PublishStatusLookup>> GetLookupsAsync()

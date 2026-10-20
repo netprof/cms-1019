@@ -27,6 +27,7 @@ Scaffolding rules for a feature on table `{T}`. Design recipes for special cases
 - Multi-map when JOINing nav objects.
 - `nchar` columns: always `RTRIM()` in SELECTs.
 - n-n: delete-then-reinsert in one transaction on update; separate query on the same connection for reads.
+- Create / Update / Delete write a `RowAudit` row via `RowAuditWriter` in the same `DbTransactionScope` (not `BeginTransaction()`): see `docs\patterns.md` → Row audit on every write.
 
 ### Controller
 - `Controllers/{T}sController.cs` at `/api/{plural}`; `PUT` takes the key from the body (no route param).
@@ -63,6 +64,9 @@ Scaffolding rules for a feature on table `{T}`. Design recipes for special cases
 - Filters/sort/page saved in session storage as `{table}-list-filters`, `{table}-list-sort`, `{table}-list-page`
 - `p-select` in drawer: always `appendTo="body"`; mapped `{ pkid, label }[]` getter; `[filter]="true"` for 10+ options
 - `p-select` / `p-multiselect` with 100+ items: add `[virtualScroll]="true" [virtualScrollItemSize]="43"`
+
+### Detail and form pages
+- First item in the toolbar's `.actions`: `<app-row-audit-badge tableName="{T}" [pkid]="…" />` (`shared/row-audit/row-audit-badge.ts`); pass null until the record is loaded and on New. A custom page that edits many records inline (no detail page) puts a single badge in its page header with `[pkids]` / `[itemLabels]` instead (FeaturedPromoItem). The spec adds `provideRowAuditStub()` and calls `expectRowAuditBadge` / `expectNoRowAuditBadge` (`core/testing/row-audit.ts`) — see `docs\patterns.md` → Row audit on every write
 
 ### Form page
 - Reactive Forms; `forkJoin` for parallel lookup calls on init

@@ -7,10 +7,11 @@ import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { AppRole, AppUserLookup } from '../app-role.model';
 import { AppRoleService } from '../app-role.service';
+import { RowAuditBadge } from '@app/shared/row-audit/row-audit-badge';
 
 @Component({
   selector: 'app-app-role-detail',
-  imports: [ButtonModule, TagModule, ToastModule],
+  imports: [ButtonModule, TagModule, ToastModule, RowAuditBadge],
   templateUrl: './app-role-detail.html',
   styles: `
     dl {

@@ -27,6 +27,7 @@ import { PublishStatusLookup } from '../../publish-statuses/publish-status.model
 import { PublishStatusService } from '../../publish-statuses/publish-status.service';
 import { CertificationLookup, CourseRequest, JobCategoryLookup } from '../course.model';
 import { CourseService } from '../course.service';
+import { RowAuditBadge } from '@app/shared/row-audit/row-audit-badge';
 
 /** `scheduleOff` must be on or after `scheduleOn`. */
 function scheduleRangeValidator(group: AbstractControl): ValidationErrors | null {
@@ -48,6 +49,7 @@ function scheduleRangeValidator(group: AbstractControl): ValidationErrors | null
     SelectModule,
     TextareaModule,
     ToastModule,
+    RowAuditBadge,
   ],
   templateUrl: './course-form.html',
   styles: `

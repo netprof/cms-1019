@@ -5,10 +5,11 @@ import { ButtonModule } from 'primeng/button';
 import { ToastModule } from 'primeng/toast';
 import { CourseGroup } from '../course-group.model';
 import { CourseGroupService } from '../course-group.service';
+import { RowAuditBadge } from '@app/shared/row-audit/row-audit-badge';
 
 @Component({
   selector: 'app-course-group-detail',
-  imports: [ButtonModule, ToastModule],
+  imports: [ButtonModule, ToastModule, RowAuditBadge],
   templateUrl: './course-group-detail.html',
   styles: `
     dl {

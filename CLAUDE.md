@@ -22,7 +22,7 @@ cd src\CMS.NG; npx ng build
 
 ## Always-on rules
 
-- Backend tests run on in-memory fakes; check every new SQL statement against the real DB.
+- Backend tests run on in-memory fakes (sole exception: `RowAuditRepositoryDbTests`); check every new SQL statement against the real DB.
 - Source files hold Chinese UI text: write them as UTF-8 with the Edit/Write tools (PowerShell 5.1 `Get-Content`/`Set-Content` need `-Encoding utf8`).
 - Files use LF; Git's CRLF warnings on Windows are harmless.
 

@@ -8,6 +8,7 @@ import { ModelPrice } from '../model-price.model';
 import { ModelPriceService } from '../model-price.service';
 import { expectStickyToolbar } from '../../../core/testing/sticky-toolbar';
 import { ModelPriceForm } from './model-price-form';
+import { expectNoRowAuditBadge, expectRowAuditBadge, provideRowAuditStub } from '@app/core/testing/row-audit';
 
 const price: ModelPrice = {
   model: 'claude-opus-5-5', effectiveDate: '2026-01-01',
@@ -31,6 +32,7 @@ describe('ModelPriceForm', () => {
     await TestBed.configureTestingModule({
       imports: [ModelPriceForm],
       providers: [
+        provideRowAuditStub(),
         { provide: ModelPriceService, useValue: service },
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap(key ?? {}) } } },
@@ -157,6 +159,16 @@ describe('ModelPriceForm', () => {
 
       expect(service.update).not.toHaveBeenCalled();
       expect(router.navigate).toHaveBeenCalledWith(['/model-prices']);
+    });
+  });
+
+  describe('異動紀錄 History badge', () => {
+    it('is hidden when adding', async () => {
+      await expectNoRowAuditBadge(await setup(null));
+    });
+
+    it('shows the history of the edited record', async () => {
+      await expectRowAuditBadge(await setup({ model: 'claude-opus-5-5', date: '2026-01-01' }), 'ModelPrice', 'claude-opus-5-5,2026-01-01');
     });
   });
 });

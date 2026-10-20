@@ -5,6 +5,7 @@ import { of } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ModelPriceService } from '../model-price.service';
 import { ModelPriceDetail } from './model-price-detail';
+import { expectRowAuditBadge, provideRowAuditStub } from '@app/core/testing/row-audit';
 
 describe('ModelPriceDetail', () => {
   let service: jasmine.SpyObj<ModelPriceService>;
@@ -21,6 +22,7 @@ describe('ModelPriceDetail', () => {
     await TestBed.configureTestingModule({
       imports: [ModelPriceDetail],
       providers: [
+        provideRowAuditStub(),
         { provide: ModelPriceService, useValue: service },
         provideRouter([]),
         {
@@ -31,6 +33,10 @@ describe('ModelPriceDetail', () => {
         MessageService,
       ],
     }).compileComponents();
+  });
+
+  it('shows the 異動紀錄 History badge for this record', async () => {
+    await expectRowAuditBadge(TestBed.createComponent(ModelPriceDetail), 'ModelPrice', 'claude-haiku-5-5,2026-01-01');
   });
 
   it('loads the price by the composite route key and renders all prices', () => {

@@ -11,6 +11,7 @@ import { Course } from '../course.model';
 import { CourseService } from '../course.service';
 import { expectStickyToolbar } from '../../../core/testing/sticky-toolbar';
 import { CourseForm } from './course-form';
+import { expectNoRowAuditBadge, expectRowAuditBadge, provideRowAuditStub } from '@app/core/testing/row-audit';
 
 const course: Course = {
   pkid: 1, title: 'Azure 基礎', officialTitle: 'Azure Fundamentals', courseId: 'AZ900', prodCourseId: 'AZ-900T00',
@@ -45,6 +46,7 @@ describe('CourseForm', () => {
     await TestBed.configureTestingModule({
       imports: [CourseForm],
       providers: [
+        provideRowAuditStub(),
         { provide: CourseService, useValue: service },
         { provide: PartnerService, useValue: partners },
         { provide: CourseGroupService, useValue: groups },
@@ -225,6 +227,16 @@ describe('CourseForm', () => {
 
       expect(service.update).not.toHaveBeenCalled();
       expect(router.navigate).toHaveBeenCalledWith(['/courses']);
+    });
+  });
+
+  describe('異動紀錄 History badge', () => {
+    it('is hidden when adding', async () => {
+      await expectNoRowAuditBadge(await setup(null));
+    });
+
+    it('shows the history of the edited record', async () => {
+      await expectRowAuditBadge(await setup('1'), 'Course', 1);
     });
   });
 });

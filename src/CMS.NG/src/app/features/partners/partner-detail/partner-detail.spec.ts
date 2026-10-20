@@ -6,6 +6,7 @@ import { MessageService } from 'primeng/api';
 import { Partner } from '../partner.model';
 import { PartnerService } from '../partner.service';
 import { PartnerDetail } from './partner-detail';
+import { expectRowAuditBadge, provideRowAuditStub } from '@app/core/testing/row-audit';
 
 const partner: Partner = {
   pkid: 2, name: 'Cisco', appKey: 'csco', nameOnPartnerMenu: 'Cisco 思科',
@@ -22,6 +23,7 @@ describe('PartnerDetail', () => {
     await TestBed.configureTestingModule({
       imports: [PartnerDetail],
       providers: [
+        provideRowAuditStub(),
         { provide: PartnerService, useValue: service },
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '2' }) } } },
@@ -29,6 +31,10 @@ describe('PartnerDetail', () => {
         MessageService,
       ],
     }).compileComponents();
+  });
+
+  it('shows the 異動紀錄 History badge for this record', async () => {
+    await expectRowAuditBadge(TestBed.createComponent(PartnerDetail), 'Partner', 2);
   });
 
   it('loads the partner by numeric route id and renders its fields', () => {

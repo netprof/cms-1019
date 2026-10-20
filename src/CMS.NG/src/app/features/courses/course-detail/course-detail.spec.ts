@@ -7,6 +7,7 @@ import { MessageService } from 'primeng/api';
 import { Course } from '../course.model';
 import { CourseService } from '../course.service';
 import { CourseDetail, QR_OPTIONS, courseShowUrl } from './course-detail';
+import { expectRowAuditBadge, provideRowAuditStub } from '@app/core/testing/row-audit';
 
 const course: Course = {
   pkid: 1, title: 'Azure 基礎', officialTitle: null, courseId: 'AZ900', prodCourseId: 'AZ-900T00',
@@ -32,6 +33,7 @@ describe('CourseDetail', () => {
     await TestBed.configureTestingModule({
       imports: [CourseDetail],
       providers: [
+        provideRowAuditStub(),
         { provide: CourseService, useValue: service },
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '1' }) } } },
@@ -39,6 +41,10 @@ describe('CourseDetail', () => {
         MessageService,
       ],
     }).compileComponents();
+  });
+
+  it('shows the 異動紀錄 History badge for this record', async () => {
+    await expectRowAuditBadge(TestBed.createComponent(CourseDetail), 'Course', 1);
   });
 
   it('loads the course by numeric route id and renders its fields', () => {

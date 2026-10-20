@@ -10,6 +10,11 @@ export interface ModelPrice {
   outputPrice: number;
 }
 
+/** RowAudit.PrimaryKeyValues of a price, as the API writes it: `model,yyyy-MM-dd`. */
+export function modelPriceAuditKey(model: string, effectiveDate: string): string {
+  return `${model},${effectiveDate}`;
+}
+
 export type ModelPriceRequest = ModelPrice;
 
 export interface ModelPriceQuery {

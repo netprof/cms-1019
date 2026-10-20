@@ -11,6 +11,7 @@ import { MultiSelectModule } from 'primeng/multiselect';
 import { ToastModule } from 'primeng/toast';
 import { AppRoleRequest, AppUserLookup } from '../app-role.model';
 import { AppRoleService } from '../app-role.service';
+import { RowAuditBadge } from '@app/shared/row-audit/row-audit-badge';
 
 @Component({
   selector: 'app-app-role-form',
@@ -21,6 +22,7 @@ import { AppRoleService } from '../app-role.service';
     InputTextModule,
     MultiSelectModule,
     ToastModule,
+    RowAuditBadge,
   ],
   templateUrl: './app-role-form.html',
   styles: `
@@ -40,6 +42,8 @@ export class AppRoleForm implements OnInit {
 
   readonly roleId = this.route.snapshot.paramMap.get('id');
   readonly isEdit = this.roleId !== null;
+  /** Known once the role has loaded (edit mode); keys its RowAudit history. */
+  readonly pkid = signal<number | null>(null);
   readonly users = signal<AppUserLookup[]>([]);
   readonly saving = signal(false);
   readonly submitted = signal(false);
@@ -65,6 +69,7 @@ export class AppRoleForm implements OnInit {
       next: ({ users, role }) => {
         this.users.set(users);
         if (role) {
+          this.pkid.set(role.pkid);
           this.form.patchValue({
             roleId: role.roleId,
             roleName: role.roleName,

@@ -1,15 +1,16 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ToastModule } from 'primeng/toast';
-import { ModelPrice } from '../model-price.model';
+import { ModelPrice, modelPriceAuditKey } from '../model-price.model';
 import { ModelPriceService } from '../model-price.service';
+import { RowAuditBadge } from '@app/shared/row-audit/row-audit-badge';
 
 @Component({
   selector: 'app-model-price-detail',
-  imports: [DecimalPipe, ButtonModule, ToastModule],
+  imports: [DecimalPipe, ButtonModule, ToastModule, RowAuditBadge],
   templateUrl: './model-price-detail.html',
   styles: `
     dl {
@@ -34,6 +35,10 @@ export class ModelPriceDetail implements OnInit {
   private readonly messages = inject(MessageService);
 
   readonly price = signal<ModelPrice | null>(null);
+  readonly auditKey = computed(() => {
+    const p = this.price();
+    return p ? modelPriceAuditKey(p.model, p.effectiveDate) : null;
+  });
 
   ngOnInit() {
     const params = this.route.snapshot.paramMap;

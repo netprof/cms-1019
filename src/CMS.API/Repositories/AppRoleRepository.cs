@@ -1,11 +1,15 @@
+using System.Data.Common;
 using CMS.API.Data;
 using CMS.API.Models;
+using CMS.API.Services;
 using Dapper;
 
 namespace CMS.API.Repositories;
 
-public class AppRoleRepository(IDbConnectionFactory connectionFactory) : IAppRoleRepository
+public class AppRoleRepository(IDbConnectionFactory connectionFactory, RowAuditWriter audit) : IAppRoleRepository
 {
+    private const string TableName = "AppRole";
+
     private const string SelectSql = """
         SELECT r.pkid AS Pkid,
                RTRIM(r.RoleId) AS RoleId,
@@ -54,6 +58,11 @@ public class AppRoleRepository(IDbConnectionFactory connectionFactory) : IAppRol
     public async Task<AppRole?> GetByIdAsync(string roleId)
     {
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
+        return await GetByIdAsync(conn, roleId);
+    }
+
+    private static async Task<AppRole?> GetByIdAsync(DbConnection conn, string roleId)
+    {
         var role = await conn.QuerySingleOrDefaultAsync<AppRole>(
             $"{SelectSql} WHERE r.RoleId = @roleId", new { roleId });
         if (role is null) return null;
@@ -73,48 +82,63 @@ public class AppRoleRepository(IDbConnectionFactory connectionFactory) : IAppRol
 
     public async Task<AppRole> CreateAsync(AppRoleRequest request)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        using var tx = conn.BeginTransaction();
 
         await conn.ExecuteAsync(
             """
             INSERT INTO AppRole (RoleId, RoleName, PermissionLevel, Description)
             VALUES (@RoleId, @RoleName, @PermissionLevel, @Description)
-            """, request, tx);
-        await ReplaceUsersAsync(conn, tx, request);
-        await tx.CommitAsync();
+            """, request);
+        await ReplaceUsersAsync(conn, request);
 
-        return (await GetByIdAsync(request.RoleId))!;
+        var created = (await GetByIdAsync(conn, request.RoleId))!;
+        await audit.LogInsertAsync(conn, TableName, created);
+        scope.Complete();
+        return created;
     }
 
     public async Task<AppRole?> UpdateAsync(AppRoleRequest request)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        using var tx = conn.BeginTransaction();
+        var before = await GetByIdAsync(conn, request.RoleId);
+        if (before is null)
+        {
+            scope.Complete(); // nothing written: leaving the scope incomplete would doom an outer transaction
+            return null;
+        }
 
-        var rows = await conn.ExecuteAsync(
+        await conn.ExecuteAsync(
             """
             UPDATE AppRole
             SET RoleName = @RoleName, PermissionLevel = @PermissionLevel, Description = @Description
             WHERE RoleId = @RoleId
-            """, request, tx);
-        if (rows == 0) return null;
+            """, request);
+        await ReplaceUsersAsync(conn, request);
 
-        await ReplaceUsersAsync(conn, tx, request);
-        await tx.CommitAsync();
-
-        return await GetByIdAsync(request.RoleId);
+        var after = (await GetByIdAsync(conn, request.RoleId))!;
+        await audit.LogUpdateAsync(conn, TableName, before, after);
+        scope.Complete();
+        return after;
     }
 
     public async Task<bool> DeleteAsync(string roleId)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        using var tx = conn.BeginTransaction();
+        var row = await GetByIdAsync(conn, roleId);
+        if (row is null)
+        {
+            scope.Complete(); // nothing written: leaving the scope incomplete would doom an outer transaction
+            return false;
+        }
 
-        await conn.ExecuteAsync("DELETE FROM AppUserRole WHERE RoleId = @roleId", new { roleId }, tx);
-        var rows = await conn.ExecuteAsync("DELETE FROM AppRole WHERE RoleId = @roleId", new { roleId }, tx);
-        await tx.CommitAsync();
-        return rows > 0;
+        await conn.ExecuteAsync("DELETE FROM AppUserRole WHERE RoleId = @roleId", new { roleId });
+        await conn.ExecuteAsync("DELETE FROM AppRole WHERE RoleId = @roleId", new { roleId });
+        await audit.LogDeleteAsync(conn, TableName, row);
+        scope.Complete();
+        return true;
     }
 
     public async Task<IEnumerable<AppUserLookup>> GetUserLookupsAsync()
@@ -126,12 +150,12 @@ public class AppRoleRepository(IDbConnectionFactory connectionFactory) : IAppRol
 
     // n-n: delete-then-reinsert
     private static async Task ReplaceUsersAsync(
-        System.Data.Common.DbConnection conn, System.Data.Common.DbTransaction tx, AppRoleRequest request)
+        DbConnection conn, AppRoleRequest request)
     {
-        await conn.ExecuteAsync("DELETE FROM AppUserRole WHERE RoleId = @RoleId", new { request.RoleId }, tx);
+        await conn.ExecuteAsync("DELETE FROM AppUserRole WHERE RoleId = @RoleId", new { request.RoleId });
 
         var rows = request.UserIds.Distinct().Select(userId => new { UserId = userId, request.RoleId });
         await conn.ExecuteAsync(
-            "INSERT INTO AppUserRole (UserId, RoleId) VALUES (@UserId, @RoleId)", rows, tx);
+            "INSERT INTO AppUserRole (UserId, RoleId) VALUES (@UserId, @RoleId)", rows);
     }
 }

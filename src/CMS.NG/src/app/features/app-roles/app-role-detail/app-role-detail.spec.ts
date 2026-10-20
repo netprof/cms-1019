@@ -5,6 +5,7 @@ import { of } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { AppRoleService } from '../app-role.service';
 import { AppRoleDetail } from './app-role-detail';
+import { expectRowAuditBadge, provideRowAuditStub } from '@app/core/testing/row-audit';
 
 describe('AppRoleDetail', () => {
   let service: jasmine.SpyObj<AppRoleService>;
@@ -22,6 +23,7 @@ describe('AppRoleDetail', () => {
     await TestBed.configureTestingModule({
       imports: [AppRoleDetail],
       providers: [
+        provideRowAuditStub(),
         { provide: AppRoleService, useValue: service },
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: 'Admin' }) } } },
@@ -29,6 +31,10 @@ describe('AppRoleDetail', () => {
         MessageService,
       ],
     }).compileComponents();
+  });
+
+  it('shows the 異動紀錄 History badge for this record', async () => {
+    await expectRowAuditBadge(TestBed.createComponent(AppRoleDetail), 'AppRole', 1);
   });
 
   it('loads the role by route id and renders its fields', () => {

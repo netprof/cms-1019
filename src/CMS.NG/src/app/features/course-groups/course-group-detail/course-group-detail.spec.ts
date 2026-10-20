@@ -6,6 +6,7 @@ import { MessageService } from 'primeng/api';
 import { CourseGroup } from '../course-group.model';
 import { CourseGroupService } from '../course-group.service';
 import { CourseGroupDetail } from './course-group-detail';
+import { expectRowAuditBadge, provideRowAuditStub } from '@app/core/testing/row-audit';
 
 const group: CourseGroup = { pkid: 2, description: '進階課程' };
 
@@ -19,6 +20,7 @@ describe('CourseGroupDetail', () => {
     await TestBed.configureTestingModule({
       imports: [CourseGroupDetail],
       providers: [
+        provideRowAuditStub(),
         { provide: CourseGroupService, useValue: service },
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '2' }) } } },
@@ -26,6 +28,10 @@ describe('CourseGroupDetail', () => {
         MessageService,
       ],
     }).compileComponents();
+  });
+
+  it('shows the 異動紀錄 History badge for this record', async () => {
+    await expectRowAuditBadge(TestBed.createComponent(CourseGroupDetail), 'CourseGroup', 2);
   });
 
   it('loads the course group by numeric route id and renders its fields', () => {

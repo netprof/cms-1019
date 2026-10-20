@@ -32,6 +32,17 @@ Example: `AppUser.PasswordHash`.
 
 Wrap the calls in `using var scope = DbTransactionScope.Begin(); … scope.Complete();` (`Data/DbTransactionScope.cs`, READ COMMITTED, async flow). Connections enlist automatically; open them one at a time (a repository method must not open a second connection while its first is open), or the transaction escalates to distributed and fails. Repository methods that need their own atomicity use the same scope instead of `BeginTransaction()`, so an outer scope covers them. Fakes undo their writes on rollback via `FakeTransaction.OnRollback`. Precedent: `ModelPricesController` (price write + cost recompute).
 
+## Row audit on every write
+
+Each repository `CreateAsync` / `UpdateAsync` / `DeleteAsync` writes one `RowAudit` row through the injected `RowAuditWriter`, on the connection that made the change and inside the method's `DbTransactionScope`, so a failed change leaves no audit row and a failed audit insert rolls the change back. Shape:
+
+- Begin the scope, open one connection, read the row with a private `GetByIdAsync(conn, …)` (Update: the "before"; Delete: the row to log). Missing → `scope.Complete()` then return null/false: a scope disposed without `Complete()` aborts an outer transaction even when nothing was written.
+- Write, re-read on the same connection, call `audit.LogInsertAsync / LogUpdateAsync(conn, TableName, before, after) / LogDeleteAsync`, then `scope.Complete()`.
+- `TableName` is a `const` holding the real table name. Tables without `pkid` pass `primaryKeyValues` (ModelPrice: `Model,yyyy-MM-dd`).
+- The Update row lists the changed scalar properties of the response model, so subquery counts (`CertificationCount`, `UserCount`, `RoleCount`) appear when links change; nav objects and id lists are not compared. An update that changes nothing writes no row.
+- Reading it back: `GET /api/rowaudit?tableName={T}&pkid={key}` for one record, `POST /api/rowaudit/query` `{ tableName, pkids }` for several (newest first, ties broken by RowAudit pkid). In the UI, `RowAuditBadge` sits first in the toolbar `.actions` of every detail and form page with the same table name and key the repository writes (ModelPrice: `modelPriceAuditKey()`). A page that edits many records in place (FeaturedPromoItem's week) gets one badge in its page header with `[pkids]` instead of one per row.
+- Writes outside Create/Update/Delete that change a row (e.g. `FeaturedPromoItemRepository.MoveAsync`) audit too: read the affected rows first, then log an Update per row.
+
 ## Child tables vs n-n links
 
 - A pure junction table (two FKs, no identity of its own, e.g. `AppUserRole`, `CourseInCertification`) is an n-n link: `p-multiselect` in the form, delete-then-reinsert in one transaction in the repository, separate query on the same connection for reads.
@@ -68,6 +79,7 @@ Every form page pins its Save/Cancel toolbar so it stays reachable on long forms
 ## Tests
 
 - Backend tests run the real HTTP pipeline through `WebApplicationFactory<Program>` against an in-memory fake repository (`FakeAppRoleRepository` pattern); they never hit SQL, so verify new SQL manually (see `docs\gotchas.md` for smoke-testing without stopping the dev server).
+- Exception: `RowAuditRepositoryDbTests` runs real repositories against `ConnectionStrings:Default`, because only the database can show that the audit row shares the change's transaction. Each test rolls back (an outer `DbTransactionScope` never completed, or a failing write with no outer scope) and finds its own rows by a fixed `TimeProvider` time; `[SqlServerFact]` skips the tests when the database is unreachable.
 - Endpoints need a bearer token, so test classes take `IClassFixture<ApiTestFactory>` (swaps in `FakeAuthRepository`, whose signing key the test tokens use) and call `_factory.CreateAuthenticatedClient()` instead of `CreateClient()`. Use a plain `CreateClient()` only to test anonymous or 401 behaviour (`AuthorizationApiTests`, `TokenUsagesApiTests`).
 - Frontend specs of the app shell sign in first with `signIn(roles)` from `core/testing/auth.ts` (writes a fake profile to session storage before `AuthService` is created); `fakeToken(roles)` builds just the token.
 - Frontend specs: when mocking `ActivatedRoute`, list its provider **after** `provideRouter(...)`, or the router's own provider overrides it.

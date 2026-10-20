@@ -5,10 +5,11 @@ import { ButtonModule } from 'primeng/button';
 import { ToastModule } from 'primeng/toast';
 import { Partner } from '../partner.model';
 import { PartnerService } from '../partner.service';
+import { RowAuditBadge } from '@app/shared/row-audit/row-audit-badge';
 
 @Component({
   selector: 'app-partner-detail',
-  imports: [ButtonModule, ToastModule],
+  imports: [ButtonModule, ToastModule, RowAuditBadge],
   templateUrl: './partner-detail.html',
   styles: `
     dl {

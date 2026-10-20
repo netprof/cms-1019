@@ -1,11 +1,15 @@
+using System.Data.Common;
 using CMS.API.Data;
 using CMS.API.Models;
+using CMS.API.Services;
 using Dapper;
 
 namespace CMS.API.Repositories;
 
-public class PartnerRepository(IDbConnectionFactory connectionFactory) : IPartnerRepository
+public class PartnerRepository(IDbConnectionFactory connectionFactory, RowAuditWriter audit) : IPartnerRepository
 {
+    private const string TableName = "Partner";
+
     private const string SelectSql = """
         SELECT p.pkid AS Pkid,
                p.Name,
@@ -52,12 +56,15 @@ public class PartnerRepository(IDbConnectionFactory connectionFactory) : IPartne
     public async Task<Partner?> GetByIdAsync(short pkid)
     {
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        return await conn.QuerySingleOrDefaultAsync<Partner>(
-            $"{SelectSql} WHERE p.pkid = @pkid", new { pkid });
+        return await GetByIdAsync(conn, pkid);
     }
+
+    private static Task<Partner?> GetByIdAsync(DbConnection conn, short pkid) =>
+        conn.QuerySingleOrDefaultAsync<Partner>($"{SelectSql} WHERE p.pkid = @pkid", new { pkid });
 
     public async Task<Partner> CreateAsync(PartnerRequest request)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
         var pkid = await conn.ExecuteScalarAsync<short>(
             """
@@ -66,13 +73,24 @@ public class PartnerRepository(IDbConnectionFactory connectionFactory) : IPartne
             SELECT CAST(SCOPE_IDENTITY() AS smallint);
             """, request);
 
-        return (await GetByIdAsync(pkid))!;
+        var created = (await GetByIdAsync(conn, pkid))!;
+        await audit.LogInsertAsync(conn, TableName, created);
+        scope.Complete();
+        return created;
     }
 
     public async Task<Partner?> UpdateAsync(PartnerRequest request)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        var rows = await conn.ExecuteAsync(
+        var before = await GetByIdAsync(conn, request.Pkid);
+        if (before is null)
+        {
+            scope.Complete(); // nothing written: leaving the scope incomplete would doom an outer transaction
+            return null;
+        }
+
+        await conn.ExecuteAsync(
             """
             UPDATE Partner
             SET Name = @Name,
@@ -83,16 +101,28 @@ public class PartnerRepository(IDbConnectionFactory connectionFactory) : IPartne
                 ImageFilename = @ImageFilename
             WHERE pkid = @Pkid
             """, request);
-        if (rows == 0) return null;
 
-        return await GetByIdAsync(request.Pkid);
+        var after = (await GetByIdAsync(conn, request.Pkid))!;
+        await audit.LogUpdateAsync(conn, TableName, before, after);
+        scope.Complete();
+        return after;
     }
 
     public async Task<bool> DeleteAsync(short pkid)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        var rows = await conn.ExecuteAsync("DELETE FROM Partner WHERE pkid = @pkid", new { pkid });
-        return rows > 0;
+        var row = await GetByIdAsync(conn, pkid);
+        if (row is null)
+        {
+            scope.Complete(); // nothing written: leaving the scope incomplete would doom an outer transaction
+            return false;
+        }
+
+        await conn.ExecuteAsync("DELETE FROM Partner WHERE pkid = @pkid", new { pkid });
+        await audit.LogDeleteAsync(conn, TableName, row);
+        scope.Complete();
+        return true;
     }
 
     public async Task<IEnumerable<PartnerLookup>> GetLookupsAsync()

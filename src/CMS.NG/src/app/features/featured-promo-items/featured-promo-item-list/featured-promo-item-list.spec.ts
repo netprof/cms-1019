@@ -8,6 +8,8 @@ import { FeaturedPromoItemForm } from '../featured-promo-item-form/featured-prom
 import { FeaturedPromoItem, PromotionLookup } from '../featured-promo-item.model';
 import { FeaturedPromoItemService } from '../featured-promo-item.service';
 import { FeaturedPromoItemList } from './featured-promo-item-list';
+import { provideRowAuditStub } from '@app/core/testing/row-audit';
+import { RowAuditService } from '@app/shared/row-audit/row-audit.service';
 
 const skillTrain: PromotionLookup = { pkid: 10, promoCode: '20251204_SkillTrainAI', topic: 'T10', description: 'D10' };
 const googleAi: PromotionLookup = { pkid: 11, promoCode: '251211_GoogleAI', topic: 'T11', description: 'D11' };
@@ -54,6 +56,7 @@ describe('FeaturedPromoItemList', () => {
     await TestBed.configureTestingModule({
       imports: [FeaturedPromoItemList],
       providers: [
+        provideRowAuditStub(),
         { provide: FeaturedPromoItemService, useValue: service },
         provideNoopAnimations(),
         ConfirmationService,
@@ -283,6 +286,59 @@ describe('FeaturedPromoItemList', () => {
 
       expect(service.delete).toHaveBeenCalledWith(2);
       expect(service.query).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('異動紀錄 History badge', () => {
+    let audit: jasmine.SpyObj<RowAuditService>;
+
+    beforeEach(async () => {
+      sessionStorage.setItem(
+        'featuredpromoitem-list-filters',
+        JSON.stringify({ trainingCenterPkid: 1, weekOf: '2026-03-16' }),
+      );
+      await setup();
+      audit = TestBed.inject(RowAuditService) as jasmine.SpyObj<RowAuditService>;
+      await fixture.whenStable();
+    });
+
+    const lastQuery = () => audit.queryHistory.calls.mostRecent().args;
+
+    it('shows exactly one badge, in the page header, covering every item of the tab + week', () => {
+      expect(el.querySelectorAll('app-row-audit-badge').length).toBe(1);
+      expect(el.querySelector('.page-header app-row-audit-badge #row-audit-button')).not.toBeNull();
+      expect(lastQuery()).toEqual(['FeaturedPromoItem', [1, 2, 3]]);
+      expect(component.auditLabels()['2']).toBe('2026-03-16 #2 Google AI工具一次掌握');
+    });
+
+    it('stays the only badge while a slot is being edited', () => {
+      button('2026-03-16', 1, 'edit')!.click();
+      fixture.detectChanges();
+
+      expect(el.querySelector('.editing app-row-audit-badge')).toBeNull();
+      expect(el.querySelectorAll('app-row-audit-badge').length).toBe(1);
+    });
+
+    it('keeps a deleted item in the history until the week changes', async () => {
+      spyOn(confirmation, 'confirm').and.callFake((c) => {
+        c.accept?.();
+        return confirmation;
+      });
+      service.query.and.returnValue(of(items.filter((i) => i.pkid !== 2)));
+
+      button('2026-03-16', 2, 'delete')!.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(lastQuery()).toEqual(['FeaturedPromoItem', [1, 3, 2]]);
+
+      service.query.and.returnValue(of([]));
+      component.shiftWeek(1);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      // An empty week sends no history request and shows the no-history state.
+      expect(component.auditPkids()).toEqual([]);
+      expect(el.querySelector('#row-audit-latest')!.textContent).toContain('尚無紀錄 No history');
     });
   });
 

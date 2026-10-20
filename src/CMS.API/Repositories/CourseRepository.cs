@@ -1,12 +1,15 @@
 using System.Data.Common;
 using CMS.API.Data;
 using CMS.API.Models;
+using CMS.API.Services;
 using Dapper;
 
 namespace CMS.API.Repositories;
 
-public class CourseRepository(IDbConnectionFactory connectionFactory) : ICourseRepository
+public class CourseRepository(IDbConnectionFactory connectionFactory, RowAuditWriter audit) : ICourseRepository
 {
+    private const string TableName = "Course";
+
     private const string SelectSql = """
         SELECT c.pkid AS Pkid,
                c.Title,
@@ -156,8 +159,8 @@ public class CourseRepository(IDbConnectionFactory connectionFactory) : ICourseR
 
     public async Task<Course> CreateAsync(CourseRequest request)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        using var tx = conn.BeginTransaction();
 
         var pkid = await conn.ExecuteScalarAsync<int>(
             """
@@ -170,20 +173,28 @@ public class CourseRepository(IDbConnectionFactory connectionFactory) : ICourseR
                     @Hour, @ListPrice, @LearningCredit, @Material, @Objective, @Target, @Prerequisites,
                     @Outline, @TowardCertOrExam, @Note, @OtherInfo, @CanRepeat);
             SELECT CAST(SCOPE_IDENTITY() AS int);
-            """, request, tx);
+            """, request);
 
-        await ReplaceLinksAsync(conn, tx, pkid, request);
-        await tx.CommitAsync();
+        await ReplaceLinksAsync(conn, pkid, request);
 
-        return (await GetByIdAsync(conn, pkid))!;
+        var created = (await GetByIdAsync(conn, pkid))!;
+        await audit.LogInsertAsync(conn, TableName, created);
+        scope.Complete();
+        return created;
     }
 
     public async Task<Course?> UpdateAsync(CourseRequest request)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        using var tx = conn.BeginTransaction();
+        var before = await GetByIdAsync(conn, request.Pkid);
+        if (before is null)
+        {
+            scope.Complete(); // nothing written: leaving the scope incomplete would doom an outer transaction
+            return null;
+        }
 
-        var rows = await conn.ExecuteAsync(
+        await conn.ExecuteAsync(
             """
             UPDATE Course
             SET Title = @Title,
@@ -210,26 +221,34 @@ public class CourseRepository(IDbConnectionFactory connectionFactory) : ICourseR
                 OtherInfo = @OtherInfo,
                 CanRepeat = @CanRepeat
             WHERE pkid = @Pkid
-            """, request, tx);
-        if (rows == 0) return null;
+            """, request);
 
-        await ReplaceLinksAsync(conn, tx, request.Pkid, request);
-        await tx.CommitAsync();
+        await ReplaceLinksAsync(conn, request.Pkid, request);
 
-        return await GetByIdAsync(conn, request.Pkid);
+        var after = (await GetByIdAsync(conn, request.Pkid))!;
+        await audit.LogUpdateAsync(conn, TableName, before, after);
+        scope.Complete();
+        return after;
     }
 
     public async Task<bool> DeleteAsync(int pkid)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        using var tx = conn.BeginTransaction();
+        var row = await GetByIdAsync(conn, pkid);
+        if (row is null)
+        {
+            scope.Complete(); // nothing written: leaving the scope incomplete would doom an outer transaction
+            return false;
+        }
 
-        await conn.ExecuteAsync("DELETE FROM CourseInCertification WHERE Course_pkid = @pkid", new { pkid }, tx);
-        await conn.ExecuteAsync("DELETE FROM CourseJobCategories WHERE Course_pkid = @pkid", new { pkid }, tx);
+        await conn.ExecuteAsync("DELETE FROM CourseInCertification WHERE Course_pkid = @pkid", new { pkid });
+        await conn.ExecuteAsync("DELETE FROM CourseJobCategories WHERE Course_pkid = @pkid", new { pkid });
         // Throws SqlException 547 if CourseFAQ / CourseRelatedLink / HotCourse still reference the course.
-        var rows = await conn.ExecuteAsync("DELETE FROM Course WHERE pkid = @pkid", new { pkid }, tx);
-        await tx.CommitAsync();
-        return rows > 0;
+        await conn.ExecuteAsync("DELETE FROM Course WHERE pkid = @pkid", new { pkid });
+        await audit.LogDeleteAsync(conn, TableName, row);
+        scope.Complete();
+        return true;
     }
 
     public async Task<IEnumerable<CertificationLookup>> GetCertificationLookupsAsync()
@@ -247,16 +266,16 @@ public class CourseRepository(IDbConnectionFactory connectionFactory) : ICourseR
     }
 
     // n-n: delete-then-reinsert for both junction tables
-    private static async Task ReplaceLinksAsync(DbConnection conn, DbTransaction tx, int pkid, CourseRequest request)
+    private static async Task ReplaceLinksAsync(DbConnection conn, int pkid, CourseRequest request)
     {
-        await conn.ExecuteAsync("DELETE FROM CourseInCertification WHERE Course_pkid = @pkid", new { pkid }, tx);
+        await conn.ExecuteAsync("DELETE FROM CourseInCertification WHERE Course_pkid = @pkid", new { pkid });
         await conn.ExecuteAsync(
             "INSERT INTO CourseInCertification (Course_pkid, Certification_pkid) VALUES (@Pkid, @CertificationPkid)",
-            request.CertificationPkids.Distinct().Select(id => new { Pkid = pkid, CertificationPkid = id }), tx);
+            request.CertificationPkids.Distinct().Select(id => new { Pkid = pkid, CertificationPkid = id }));
 
-        await conn.ExecuteAsync("DELETE FROM CourseJobCategories WHERE Course_pkid = @pkid", new { pkid }, tx);
+        await conn.ExecuteAsync("DELETE FROM CourseJobCategories WHERE Course_pkid = @pkid", new { pkid });
         await conn.ExecuteAsync(
             "INSERT INTO CourseJobCategories (Course_pkid, JobCategory_pkid) VALUES (@Pkid, @JobCategoryPkid)",
-            request.JobCategoryPkids.Distinct().Select(id => new { Pkid = pkid, JobCategoryPkid = id }), tx);
+            request.JobCategoryPkids.Distinct().Select(id => new { Pkid = pkid, JobCategoryPkid = id }));
     }
 }

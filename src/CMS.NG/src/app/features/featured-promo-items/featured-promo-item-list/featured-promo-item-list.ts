@@ -15,6 +15,7 @@ import {
   TrainingCenterLookup,
 } from '../featured-promo-item.model';
 import { FeaturedPromoItemService } from '../featured-promo-item.service';
+import { RowAuditBadge } from '@app/shared/row-audit/row-audit-badge';
 
 const FILTERS_KEY = 'featuredpromoitem-list-filters';
 
@@ -77,6 +78,7 @@ function shortDate(d: Date): string {
     ToastModule,
     TooltipModule,
     FeaturedPromoItemForm,
+    RowAuditBadge,
   ],
   templateUrl: './featured-promo-item-list.html',
   styles: `
@@ -142,6 +144,20 @@ export class FeaturedPromoItemList implements OnInit {
   readonly editing = signal<EditTarget | null>(null);
   /** Copy buffer; Paste opens a New form pre-filled from it. */
   readonly clip = signal<FeaturedPromoItemClip | null>(null);
+  /**
+   * Items deleted from this tab + week while it was open. RowAudit keeps only the pkid, so a deleted
+   * item cannot be traced back to its day and center; remembering them keeps their Delete rows (and
+   * earlier history) in the badge until the tab or week changes.
+   */
+  private readonly removed = signal<FeaturedPromoItem[]>([]);
+
+  /** The 異動紀錄 History badge covers every item of this tab + week. */
+  readonly auditPkids = computed(() => [...this.items(), ...this.removed()].map((i) => i.pkid));
+  readonly auditLabels = computed(() =>
+    Object.fromEntries(
+      [...this.removed(), ...this.items()].map((i) => [String(i.pkid), `${i.scheduleOn.slice(0, 10)} #${i.slot} ${i.topic}`]),
+    ),
+  );
 
   readonly weekLabel = computed(() => {
     const start = this.weekStart();
@@ -206,18 +222,21 @@ export class FeaturedPromoItemList implements OnInit {
     if (Number.isNaN(pkid) || pkid === this.trainingCenterPkid()) return;
     this.trainingCenterPkid.set(pkid);
     this.editing.set(null);
+    this.removed.set([]);
     this.fetch();
   }
 
   shiftWeek(weeks: number) {
     this.weekStart.set(addDays(this.weekStart(), weeks * 7));
     this.editing.set(null);
+    this.removed.set([]);
     this.fetch();
   }
 
   thisWeek() {
     this.weekStart.set(mondayOf(new Date()));
     this.editing.set(null);
+    this.removed.set([]);
     this.fetch();
   }
 
@@ -281,6 +300,7 @@ export class FeaturedPromoItemList implements OnInit {
         this.service.delete(item.pkid).subscribe({
           next: () => {
             this.messages.add({ severity: 'success', summary: '已刪除', detail: item.promotion.promoCode });
+            this.removed.update((r) => [...r, item]);
             this.fetch();
           },
           error: (err: HttpErrorResponse) => {

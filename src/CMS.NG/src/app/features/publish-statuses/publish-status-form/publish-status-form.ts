@@ -10,6 +10,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { ToastModule } from 'primeng/toast';
 import { PublishStatusRequest } from '../publish-status.model';
 import { PublishStatusService } from '../publish-status.service';
+import { RowAuditBadge } from '@app/shared/row-audit/row-audit-badge';
 
 @Component({
   selector: 'app-publish-status-form',
@@ -20,6 +21,7 @@ import { PublishStatusService } from '../publish-status.service';
     InputNumberModule,
     InputTextModule,
     ToastModule,
+    RowAuditBadge,
   ],
   templateUrl: './publish-status-form.html',
   styles: `

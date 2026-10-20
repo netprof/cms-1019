@@ -1,12 +1,16 @@
+using System.Data.Common;
 using System.Text.Json;
 using CMS.API.Data;
 using CMS.API.Models;
+using CMS.API.Services;
 using Dapper;
 
 namespace CMS.API.Repositories;
 
-public class AppUserRepository(IDbConnectionFactory connectionFactory) : IAppUserRepository
+public class AppUserRepository(IDbConnectionFactory connectionFactory, RowAuditWriter audit) : IAppUserRepository
 {
+    private const string TableName = "AppUser";
+
     // PasswordHash is intentionally never selected.
     private const string SelectSql = """
         SELECT u.pkid AS Pkid,
@@ -69,6 +73,11 @@ public class AppUserRepository(IDbConnectionFactory connectionFactory) : IAppUse
     public async Task<AppUser?> GetByIdAsync(string userId)
     {
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
+        return await GetByIdAsync(conn, userId);
+    }
+
+    private static async Task<AppUser?> GetByIdAsync(DbConnection conn, string userId)
+    {
         var user = await conn.QuerySingleOrDefaultAsync<AppUser>(
             $"{SelectSql} WHERE u.UserId = @userId", new { userId });
         if (user is null) return null;
@@ -95,8 +104,8 @@ public class AppUserRepository(IDbConnectionFactory connectionFactory) : IAppUse
 
     public async Task<AppUser> CreateAsync(AppUserRequest request, string passwordHash)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        using var tx = conn.BeginTransaction();
 
         await conn.ExecuteAsync(
             """
@@ -107,42 +116,57 @@ public class AppUserRepository(IDbConnectionFactory connectionFactory) : IAppUse
             {
                 request.UserId, request.UserName, request.IsActive,
                 PasswordHash = passwordHash, PasswordUpdatedTime = DateTime.UtcNow,
-            }, tx);
-        await ReplaceRolesAsync(conn, tx, request);
-        await tx.CommitAsync();
+            });
+        await ReplaceRolesAsync(conn, request);
 
-        return (await GetByIdAsync(request.UserId))!;
+        var created = (await GetByIdAsync(conn, request.UserId))!;
+        await audit.LogInsertAsync(conn, TableName, created);
+        scope.Complete();
+        return created;
     }
 
     public async Task<AppUser?> UpdateAsync(AppUserRequest request)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        using var tx = conn.BeginTransaction();
+        var before = await GetByIdAsync(conn, request.UserId);
+        if (before is null)
+        {
+            scope.Complete(); // nothing written: leaving the scope incomplete would doom an outer transaction
+            return null;
+        }
 
         // PasswordHash / PasswordUpdatedTime are deliberately not in the SET list.
-        var rows = await conn.ExecuteAsync(
+        await conn.ExecuteAsync(
             """
             UPDATE AppUser
             SET UserName = @UserName, IsActive = @IsActive
             WHERE UserId = @UserId
-            """, request, tx);
-        if (rows == 0) return null;
+            """, request);
+        await ReplaceRolesAsync(conn, request);
 
-        await ReplaceRolesAsync(conn, tx, request);
-        await tx.CommitAsync();
-
-        return await GetByIdAsync(request.UserId);
+        var after = (await GetByIdAsync(conn, request.UserId))!;
+        await audit.LogUpdateAsync(conn, TableName, before, after);
+        scope.Complete();
+        return after;
     }
 
     public async Task<bool> DeleteAsync(string userId)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        using var tx = conn.BeginTransaction();
+        var row = await GetByIdAsync(conn, userId);
+        if (row is null)
+        {
+            scope.Complete(); // nothing written: leaving the scope incomplete would doom an outer transaction
+            return false;
+        }
 
-        await conn.ExecuteAsync("DELETE FROM AppUserRole WHERE UserId = @userId", new { userId }, tx);
-        var rows = await conn.ExecuteAsync("DELETE FROM AppUser WHERE UserId = @userId", new { userId }, tx);
-        await tx.CommitAsync();
-        return rows > 0;
+        await conn.ExecuteAsync("DELETE FROM AppUserRole WHERE UserId = @userId", new { userId });
+        await conn.ExecuteAsync("DELETE FROM AppUser WHERE UserId = @userId", new { userId });
+        await audit.LogDeleteAsync(conn, TableName, row);
+        scope.Complete();
+        return true;
     }
 
     public async Task<string> GetDefaultPasswordAsync()
@@ -172,12 +196,12 @@ public class AppUserRepository(IDbConnectionFactory connectionFactory) : IAppUse
 
     // n-n: delete-then-reinsert
     private static async Task ReplaceRolesAsync(
-        System.Data.Common.DbConnection conn, System.Data.Common.DbTransaction tx, AppUserRequest request)
+        DbConnection conn, AppUserRequest request)
     {
-        await conn.ExecuteAsync("DELETE FROM AppUserRole WHERE UserId = @UserId", new { request.UserId }, tx);
+        await conn.ExecuteAsync("DELETE FROM AppUserRole WHERE UserId = @UserId", new { request.UserId });
 
         var rows = request.RoleIds.Distinct().Select(roleId => new { request.UserId, RoleId = roleId });
         await conn.ExecuteAsync(
-            "INSERT INTO AppUserRole (UserId, RoleId) VALUES (@UserId, @RoleId)", rows, tx);
+            "INSERT INTO AppUserRole (UserId, RoleId) VALUES (@UserId, @RoleId)", rows);
     }
 }

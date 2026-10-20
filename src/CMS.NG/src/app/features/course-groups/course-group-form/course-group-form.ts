@@ -7,10 +7,11 @@ import { InputTextModule } from 'primeng/inputtext';
 import { ToastModule } from 'primeng/toast';
 import { CourseGroupRequest } from '../course-group.model';
 import { CourseGroupService } from '../course-group.service';
+import { RowAuditBadge } from '@app/shared/row-audit/row-audit-badge';
 
 @Component({
   selector: 'app-course-group-form',
-  imports: [ReactiveFormsModule, ButtonModule, InputTextModule, ToastModule],
+  imports: [ReactiveFormsModule, ButtonModule, InputTextModule, ToastModule, RowAuditBadge],
   templateUrl: './course-group-form.html',
 })
 export class CourseGroupForm implements OnInit {

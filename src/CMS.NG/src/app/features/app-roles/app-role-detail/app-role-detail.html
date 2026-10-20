@@ -3,6 +3,7 @@
 <div class="page-header">
   <h1>檢視角色</h1>
   <div class="actions">
+    <app-row-audit-badge tableName="AppRole" [pkid]="role()?.pkid ?? null" />
     <p-button id="back-button" label="返回" icon="pi pi-arrow-left" severity="secondary" (onClick)="back()" />
     @if (role()) {
       <p-button id="edit-button" label="編輯" icon="pi pi-pencil" (onClick)="edit()" />

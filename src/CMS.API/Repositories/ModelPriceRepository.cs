@@ -1,11 +1,15 @@
+using System.Data.Common;
 using CMS.API.Data;
 using CMS.API.Models;
+using CMS.API.Services;
 using Dapper;
 
 namespace CMS.API.Repositories;
 
-public class ModelPriceRepository(IDbConnectionFactory connectionFactory) : IModelPriceRepository
+public class ModelPriceRepository(IDbConnectionFactory connectionFactory, RowAuditWriter audit) : IModelPriceRepository
 {
+    private const string TableName = "ModelPrice";
+
     private const string SelectSql = """
         SELECT m.Model,
                m.EffectiveDate,
@@ -71,11 +75,15 @@ public class ModelPriceRepository(IDbConnectionFactory connectionFactory) : IMod
 
     // Writes re-read on the connection they wrote with: callers run them inside a DbTransactionScope,
     // where a second open connection would escalate to a distributed transaction.
-    private static Task<ModelPrice?> ReadAsync(System.Data.IDbConnection conn, string model, DateOnly effectiveDate) =>
+    private static Task<ModelPrice?> ReadAsync(DbConnection conn, string model, DateOnly effectiveDate) =>
         conn.QuerySingleOrDefaultAsync<ModelPrice>(SelectSql + KeyWhere, new { model, effectiveDate });
+
+    /// <summary>RowAudit.PrimaryKeyValues for the composite key: <c>Model,yyyy-MM-dd</c>.</summary>
+    private static string AuditKey(ModelPrice price) => $"{price.Model},{price.EffectiveDate:yyyy-MM-dd}";
 
     public async Task<ModelPrice> CreateAsync(ModelPriceRequest request)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
         await conn.ExecuteAsync(
             """
@@ -83,13 +91,24 @@ public class ModelPriceRepository(IDbConnectionFactory connectionFactory) : IMod
             VALUES (@Model, @EffectiveDate, @InputPrice, @CacheWrite5mPrice, @CacheWrite1hPrice, @CacheReadPrice, @OutputPrice)
             """, request);
 
-        return (await ReadAsync(conn, request.Model, request.EffectiveDate))!;
+        var created = (await ReadAsync(conn, request.Model, request.EffectiveDate))!;
+        await audit.LogInsertAsync(conn, TableName, created, AuditKey(created));
+        scope.Complete();
+        return created;
     }
 
     public async Task<ModelPrice?> UpdateAsync(ModelPriceRequest request)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        var rows = await conn.ExecuteAsync(
+        var before = await ReadAsync(conn, request.Model, request.EffectiveDate);
+        if (before is null)
+        {
+            scope.Complete(); // nothing written: leaving the scope incomplete would doom an outer transaction
+            return null;
+        }
+
+        await conn.ExecuteAsync(
             """
             UPDATE ModelPrice
             SET InputPrice = @InputPrice,
@@ -99,17 +118,29 @@ public class ModelPriceRepository(IDbConnectionFactory connectionFactory) : IMod
                 OutputPrice = @OutputPrice
             WHERE Model = @Model AND EffectiveDate = @EffectiveDate
             """, request);
-        if (rows == 0) return null;
 
-        return await ReadAsync(conn, request.Model, request.EffectiveDate);
+        var after = (await ReadAsync(conn, request.Model, request.EffectiveDate))!;
+        await audit.LogUpdateAsync(conn, TableName, before, after, AuditKey(after));
+        scope.Complete();
+        return after;
     }
 
     public async Task<bool> DeleteAsync(string model, DateOnly effectiveDate)
     {
+        using var scope = DbTransactionScope.Begin();
         using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        var rows = await conn.ExecuteAsync(
+        var row = await ReadAsync(conn, model, effectiveDate);
+        if (row is null)
+        {
+            scope.Complete(); // nothing written: leaving the scope incomplete would doom an outer transaction
+            return false;
+        }
+
+        await conn.ExecuteAsync(
             "DELETE FROM ModelPrice WHERE Model = @model AND EffectiveDate = @effectiveDate",
             new { model, effectiveDate });
-        return rows > 0;
+        await audit.LogDeleteAsync(conn, TableName, row, AuditKey(row));
+        scope.Complete();
+        return true;
     }
 }

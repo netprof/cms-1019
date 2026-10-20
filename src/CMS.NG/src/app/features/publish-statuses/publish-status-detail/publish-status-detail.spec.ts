@@ -5,6 +5,7 @@ import { of } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { PublishStatusService } from '../publish-status.service';
 import { PublishStatusDetail } from './publish-status-detail';
+import { expectRowAuditBadge, provideRowAuditStub } from '@app/core/testing/row-audit';
 
 describe('PublishStatusDetail', () => {
   let service: jasmine.SpyObj<PublishStatusService>;
@@ -18,6 +19,7 @@ describe('PublishStatusDetail', () => {
     await TestBed.configureTestingModule({
       imports: [PublishStatusDetail],
       providers: [
+        provideRowAuditStub(),
         { provide: PublishStatusService, useValue: service },
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '2' }) } } },
@@ -25,6 +27,10 @@ describe('PublishStatusDetail', () => {
         MessageService,
       ],
     }).compileComponents();
+  });
+
+  it('shows the 異動紀錄 History badge for this record', async () => {
+    await expectRowAuditBadge(TestBed.createComponent(PublishStatusDetail), 'PublishStatus', 2);
   });
 
   it('loads the status by numeric route id and renders its fields', () => {

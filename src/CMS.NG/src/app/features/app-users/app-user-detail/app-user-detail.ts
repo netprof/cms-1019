@@ -9,10 +9,11 @@ import { ToastModule } from 'primeng/toast';
 import { AppRoleLookup, AppUser } from '../app-user.model';
 import { AppUserService } from '../app-user.service';
 import { ResetPasswordButton } from '../reset-password-button/reset-password-button';
+import { RowAuditBadge } from '@app/shared/row-audit/row-audit-badge';
 
 @Component({
   selector: 'app-app-user-detail',
-  imports: [DatePipe, ButtonModule, ResetPasswordButton, TagModule, ToastModule],
+  imports: [DatePipe, ButtonModule, ResetPasswordButton, TagModule, ToastModule, RowAuditBadge],
   templateUrl: './app-user-detail.html',
   styles: `
     dl {

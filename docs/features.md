@@ -141,3 +141,17 @@ Second card on `/profile` (`#password-form`): 目前密碼 / 新密碼 / 確認�
 - The detail page re-reads the user after a reset, since the response has no body.
 - Replaced `POST /api/appusers/{id}/reset-password`, which any signed-in user could call; it and `IAppUserRepository.ResetPasswordAsync` are removed.
 - Real-DB check: old route → 404, no token → 401. The Admin path was not exercised against the DB (the dev admin's password had been changed from the default, so the smoke test could not sign in); it is covered by `ResetPasswordApiTests`.
+
+## Row audit (`RowAudit`)
+
+Every Create / Update / Delete in the CRUD repositories (AppUser, AppRole, PublishStatus, Partner, CourseGroup, Course, FeaturedPromoItem, ModelPrice) writes one `RowAudit` row in the same transaction as the change.
+
+- `GET /api/rowaudit?tableName=&pkid=` returns one record's `dateTime` (UTC, no offset), `userName`, `actionType`, `actionDesc`, newest first; any signed-in user; blank tableName or pkid → 400. `pkid` is a string so ModelPrice's `model,yyyy-MM-dd` fits.
+- 異動紀錄 History badge (`shared/row-audit/row-audit-badge.ts`, `RowAuditBadge`): first in the toolbar actions of all 7 detail pages and 7 form pages. Shows the latest change inline (`Update by alice · 2026-06-04 14:30`, local time) or 尚無紀錄 No history; click opens a `p-dialog` with the full trail. Hidden on New forms and until the record loads. The history is fetched once per page load, not again when the dialog opens.
+- FeaturedPromoItem (week page, inline forms): one badge in the page header covering every item of the selected tab + week (`[pkids]` + `[itemLabels]` → `POST /api/rowaudit/query`, max 200 keys; the dialog adds an 項目 Item column `#pkid day #slot topic`). It refetches whenever the week's items reload (save, move, delete). RowAudit stores only the pkid, so an item deleted earlier (or by someone else) can no longer be traced to its tab + week and is not shown; items deleted from the open page stay in the badge until the tab or week changes.
+- Move up/down (`MoveAsync`) writes one `Slot` Update row for each of the two swapped items.
+
+- `Services/RowAuditWriter.cs`. UserName = the JWT `name` claim of the current request (`IHttpContextAccessor`), `system` without a signed-in user, cut to the column's 100 chars. DateTime is UTC. PrimaryKeyValues = `Pkid`; ModelPrice = `Model,yyyy-MM-dd`.
+- ActionDesc: Insert/Delete = the first string property of the response model (declaration order; AppUser → UserId, AppRole → RoleId, ModelPrice → Model). Update = comma-separated changed scalar property names; no change → no row. Cut to fit `varchar(1000)` in code page 950 (Big5 is 2 bytes per Chinese character, so at most 500 of them; verified on SQL Server: 501 → error 8152).
+- Course, AppRole and AppUser moved from `BeginTransaction()` to `DbTransactionScope` so the audit insert shares the transaction. Not audited: `AuthRepository` (My Profile name change, password change/reset) and TokenUsage ingest/cost recompute.
+- Tests: `RowAuditWriterTests` (reflection rules, in memory), `RowAuditRepositoryDbTests` (real DB, rolled back: write paths and the history query), `RowAuditApiTests` (both endpoints over a fake), `row-audit-badge.spec.ts`, and one badge check per detail/form page spec. Pattern: `docs\patterns.md` → Row audit on every write.

@@ -8,6 +8,7 @@ import { signIn } from '@app/core/testing/auth';
 import { AppUser } from '../app-user.model';
 import { AppUserService } from '../app-user.service';
 import { AppUserDetail } from './app-user-detail';
+import { expectRowAuditBadge, provideRowAuditStub } from '@app/core/testing/row-audit';
 
 const user: AppUser = {
   pkid: 1, userId: 'helen', userName: 'Helen', isActive: true,
@@ -29,6 +30,7 @@ describe('AppUserDetail', () => {
     await TestBed.configureTestingModule({
       imports: [AppUserDetail],
       providers: [
+        provideRowAuditStub(),
         { provide: AppUserService, useValue: service },
         provideRouter([]),
         provideHttpClient(),
@@ -43,6 +45,10 @@ describe('AppUserDetail', () => {
   });
 
   afterEach(() => sessionStorage.clear());
+
+  it('shows the 異動紀錄 History badge for this record', async () => {
+    await expectRowAuditBadge(TestBed.createComponent(AppUserDetail), 'AppUser', 1);
+  });
 
   it('loads the user by route id and renders its fields', () => {
     const fixture = TestBed.createComponent(AppUserDetail);

@@ -8,12 +8,13 @@ import { InputTextModule } from 'primeng/inputtext';
 import { ToastModule } from 'primeng/toast';
 import { PartnerRequest } from '../partner.model';
 import { PartnerService } from '../partner.service';
+import { RowAuditBadge } from '@app/shared/row-audit/row-audit-badge';
 
 type TextField = 'name' | 'appKey' | 'nameOnPartnerMenu' | 'nameOnCourseDetailPage' | 'imageFilename';
 
 @Component({
   selector: 'app-partner-form',
-  imports: [ReactiveFormsModule, ButtonModule, InputNumberModule, InputTextModule, ToastModule],
+  imports: [ReactiveFormsModule, ButtonModule, InputNumberModule, InputTextModule, ToastModule, RowAuditBadge],
   templateUrl: './partner-form.html',
 })
 export class PartnerForm implements OnInit {

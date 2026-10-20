@@ -6,10 +6,11 @@ import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { PublishStatus } from '../publish-status.model';
 import { PublishStatusService } from '../publish-status.service';
+import { RowAuditBadge } from '@app/shared/row-audit/row-audit-badge';
 
 @Component({
   selector: 'app-publish-status-detail',
-  imports: [ButtonModule, TagModule, ToastModule],
+  imports: [ButtonModule, TagModule, ToastModule, RowAuditBadge],
   templateUrl: './publish-status-detail.html',
   styles: `
     dl {

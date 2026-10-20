@@ -8,6 +8,7 @@ import { PublishStatus } from '../publish-status.model';
 import { PublishStatusService } from '../publish-status.service';
 import { expectStickyToolbar } from '../../../core/testing/sticky-toolbar';
 import { PublishStatusForm } from './publish-status-form';
+import { expectNoRowAuditBadge, expectRowAuditBadge, provideRowAuditStub } from '@app/core/testing/row-audit';
 
 const status: PublishStatus = {
   pkid: 2, description: '已發布', isDraft: false, isPublished: true, isDiscontinued: false,
@@ -26,6 +27,7 @@ describe('PublishStatusForm', () => {
     await TestBed.configureTestingModule({
       imports: [PublishStatusForm],
       providers: [
+        provideRowAuditStub(),
         { provide: PublishStatusService, useValue: service },
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap(id ? { id } : {}) } } },
@@ -145,6 +147,16 @@ describe('PublishStatusForm', () => {
 
       expect(service.update).not.toHaveBeenCalled();
       expect(router.navigate).toHaveBeenCalledWith(['/publish-statuses']);
+    });
+  });
+
+  describe('異動紀錄 History badge', () => {
+    it('is hidden when adding', async () => {
+      await expectNoRowAuditBadge(await setup(null));
+    });
+
+    it('shows the history of the edited record', async () => {
+      await expectRowAuditBadge(await setup('2'), 'PublishStatus', 2);
     });
   });
 });

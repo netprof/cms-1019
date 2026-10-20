@@ -9,14 +9,15 @@ import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
 import { ToastModule } from 'primeng/toast';
 import { parseIso, toIso } from '../../../core/utils/date.util';
-import { ModelPriceRequest } from '../model-price.model';
+import { ModelPriceRequest, modelPriceAuditKey } from '../model-price.model';
 import { ModelPriceService } from '../model-price.service';
+import { RowAuditBadge } from '@app/shared/row-audit/row-audit-badge';
 
 type PriceField = 'inputPrice' | 'cacheWrite5mPrice' | 'cacheWrite1hPrice' | 'cacheReadPrice' | 'outputPrice';
 
 @Component({
   selector: 'app-model-price-form',
-  imports: [ReactiveFormsModule, ButtonModule, DatePickerModule, InputNumberModule, InputTextModule, ToastModule],
+  imports: [ReactiveFormsModule, ButtonModule, DatePickerModule, InputNumberModule, InputTextModule, ToastModule, RowAuditBadge],
   templateUrl: './model-price-form.html',
 })
 export class ModelPriceForm implements OnInit {
@@ -29,6 +30,7 @@ export class ModelPriceForm implements OnInit {
   private readonly modelParam = this.route.snapshot.paramMap.get('model');
   private readonly dateParam = this.route.snapshot.paramMap.get('date');
   readonly isEdit = this.modelParam !== null && this.dateParam !== null;
+  readonly auditKey = this.isEdit ? modelPriceAuditKey(this.modelParam!, this.dateParam!) : null;
   readonly saving = signal(false);
   readonly submitted = signal(false);
 

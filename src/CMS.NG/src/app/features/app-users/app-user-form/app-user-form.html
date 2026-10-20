@@ -4,6 +4,7 @@
   <div class="page-header sticky-toolbar" id="form-toolbar">
     <h1>{{ isEdit ? '編輯使用者' : '新增使用者' }}</h1>
     <div class="actions">
+      <app-row-audit-badge tableName="AppUser" [pkid]="pkid()" />
       @if (isEdit) {
         <!-- Admin only; renders nothing for other users. -->
         <app-reset-password-button [userId]="userId!" />

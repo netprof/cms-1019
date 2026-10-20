@@ -8,6 +8,7 @@ import { CourseGroup } from '../course-group.model';
 import { CourseGroupService } from '../course-group.service';
 import { expectStickyToolbar } from '../../../core/testing/sticky-toolbar';
 import { CourseGroupForm } from './course-group-form';
+import { expectNoRowAuditBadge, expectRowAuditBadge, provideRowAuditStub } from '@app/core/testing/row-audit';
 
 const group: CourseGroup = { pkid: 2, description: '進階課程' };
 
@@ -24,6 +25,7 @@ describe('CourseGroupForm', () => {
     await TestBed.configureTestingModule({
       imports: [CourseGroupForm],
       providers: [
+        provideRowAuditStub(),
         { provide: CourseGroupService, useValue: service },
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap(id ? { id } : {}) } } },
@@ -131,6 +133,16 @@ describe('CourseGroupForm', () => {
 
       expect(service.update).not.toHaveBeenCalled();
       expect(router.navigate).toHaveBeenCalledWith(['/course-groups']);
+    });
+  });
+
+  describe('異動紀錄 History badge', () => {
+    it('is hidden when adding', async () => {
+      await expectNoRowAuditBadge(await setup(null));
+    });
+
+    it('shows the history of the edited record', async () => {
+      await expectRowAuditBadge(await setup('2'), 'CourseGroup', 2);
     });
   });
 });

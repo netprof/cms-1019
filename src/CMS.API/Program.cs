@@ -61,6 +61,9 @@ builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<TokenCostService>();
 builder.Services.AddScoped<JwtTokenService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<RowAuditWriter>();
+builder.Services.AddScoped<IRowAuditRepository, RowAuditRepository>();
 
 builder.Services.AddCors(options =>
 {

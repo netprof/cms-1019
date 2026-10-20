@@ -4,6 +4,7 @@
   <div class="page-header sticky-toolbar" id="form-toolbar">
     <h1>{{ isEdit ? '編輯課程群組' : '新增課程群組' }}</h1>
     <div class="actions">
+      <app-row-audit-badge tableName="CourseGroup" [pkid]="pkid" />
       <p-button id="cancel-button" label="取消" icon="pi pi-times" severity="secondary" (onClick)="cancel()" />
       <p-button id="save-button" type="submit" label="儲存" icon="pi pi-check" [loading]="saving()" />
     </div>
