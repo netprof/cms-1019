@@ -423,6 +423,40 @@ New `core/utils/date.util.ts`: `toIso(d: Date | null): string | null` using loca
 - On init: `forkJoin` the three lookups, then apply incoming `partnerPkid` / `courseGroupPkid` / `publishStatusPkid` query params (override + persist) or restore saved filters, then fetch.
 - Default sort `displayOrder ASC`; page size 20; `[tableStyle]` min-width ~110rem with horizontal scroll.
 
+#### In-place editing (list table)
+
+Cells are edited in place on the list page, separately from the Edit form. This does not use PrimeNG's `pEditableColumn`, because that opens on a **single** click and has no double-click option. Instead the component keeps one `cellEdit: { pkid, field, value, error } | null` and renders the editor with `@if (editFor(c, field); as e)`. Each `<td>` has `data-field="{field}"`.
+
+| Column | Editable | Editor | Validation (inline error text) |
+|--------|----------|--------|-------------------------------|
+| 主代碼 | no (key) | — | — |
+| 顯示順序 | yes | `p-inputnumber`, 0 decimals, no grouping | required 「必填」; integer 「請輸入整數」 |
+| 簡介代碼 / 科目代碼 | yes | `input pInputText` | required (after trim); max 50 「長度不可超過 50 字」 |
+| 課程名稱 | yes | `input pInputText` | required (after trim); max 200 |
+| 原廠 | no (FK lookup) | — | — |
+| 課程群組 | no (FK lookup) | — | — |
+| 上架狀態 | yes | `p-select` over `publishStatuses()`, `appendTo="body"` | required |
+| 上架日期 / 下架日期 | yes | `p-datepicker` `yy/mm/dd`, `appendTo="body"` | required; valid date 「請輸入有效日期」; 上架 ≤ 下架, compared with the row's other date 「上架日期不可晚於下架日期」 |
+| 時數 | yes | `p-inputnumber`, 0 decimals | required; finite number 「請輸入有效數字」; ≥ 0 「不可為負數」; integer; ≤ 32767 |
+| 定價 | yes | `p-inputnumber`, 0 decimals | required; finite; ≥ 0; ≤ 999,999,999 |
+| 點數 | yes | `p-inputnumber`, 1 decimal | required; finite; ≥ 0; ≤ 99,999,999.9 |
+| 允許重聽 | yes | `p-checkbox` binary | — |
+
+The numeric editors have no `min`, so a negative value reaches validation instead of being silently clamped. The limits mirror `CourseRequest`.
+
+| Item | Behaviour |
+|------|-----------|
+| Enter edit mode | `(dblclick)` on an editable cell → `startEdit(course, field)`. A single click does nothing. Date drafts are `Date` (`parseIso`). The editor (id `cell-editor`) is focused with `afterNextRender`, and text is selected |
+| Another cell double-clicked | The open editor is committed first. If it is invalid it stays open, is refocused, and the new cell does not open |
+| Commit | `(blur)` / `(onBlur)` → `onEditorBlur()`; Enter → `commitEdit()`. `p-select` also commits on `(onChange)`, `p-datepicker` on `(onClose)`. Their blur is ignored while `overlayVisible` (focus moves into the panel) |
+| Cancel | Escape → `cancelEdit()`; nothing is saved |
+| Invalid value | `cellEdit.error` is set, the editor gets `[invalid]` plus `<small class="cell-error">`, and the cell stays in edit mode. No request is sent |
+| Unchanged value | The editor closes and no request is sent (strings trimmed, dates compared as ISO) |
+| Save | Optimistic: the row shows the new value at once (上架狀態 also swaps the `publishStatus` nav object from the lookup). Then `GET /api/courses/{pkid}` → `PUT /api/courses` with that record and only the edited field changed. The GET is needed because list rows carry no `certificationPkids`/`jobCategoryPkids`, and `PUT` replaces the n-n links. On success the row is replaced with the response and a toast 「已儲存」 shows |
+| Save failure | The row reverts to its previous value and an error toast shows: 404 「此課程已不存在，請重新整理」, 400 「資料驗證失敗，已還原」, otherwise 「儲存失敗，已還原」 |
+| Concurrency | `savingPkids` locks a row while its save is in flight; double-clicks on it are ignored |
+| Styling | `td.editable` has `cursor: cell` and a hover background; `td.cell-editing` has reduced padding |
+
 ### Delete Confirmation Message
 
 ```
@@ -498,7 +532,7 @@ Partner, CourseGroup and PublishStatus list 操作 columns and detail toolbars g
 
 - `date.util.spec.ts` — `toIso` uses local components; `parseIso` round-trips
 - `course.service.spec.ts` — every method URL/verb
-- `course-list.spec.ts` — renders rows with nav labels, lookups loaded, incoming `partnerPkid` param overrides saved filters, filter persistence incl. date → ISO, sort/page, navigation, delete confirm + 409
+- `course-list.spec.ts` — renders rows with nav labels, lookups loaded, incoming `partnerPkid` param overrides saved filters, filter persistence incl. date → ISO, sort/page, navigation, delete confirm + 409; in-place editing: single click doesn't open an editor and double-click does (with the current value), each column renders its editor type, 主代碼 / 原廠 / 課程群組 can't be edited, blur calls `get` + `update` with the trimmed value and the record's n-n keys, an unchanged value and Escape send nothing, a cleared required field shows 「必填」 and stays open, 時數 / 定價 / 點數 reject negative / NaN / null and accept 0, dates reject invalid / null, 上架 > 下架 is blocked from either side, dates are saved as ISO, 上架狀態 / 允許重聽 save, and a failed save reverts the row and shows an error toast
 - `course-detail.spec.ts` — renders fields, chips resolved from lookups, null group shows 「—」, edit/back
 - `course-form.spec.ts` — add: defaults, required validation, date-range validator, ScheduleOff auto-default, create payload (ISO dates, nulls, n-n); edit: loads record, pkid read-only, update payload, cancel
 - Parent list/detail specs — 查看課程 navigates with the right query param
@@ -521,4 +555,5 @@ Partner, CourseGroup and PublishStatus list 操作 columns and detail toolbars g
 | Frontend | `features/courses/course-list/`, `course-detail/`, `course-form/` (ts, html, spec) | create |
 | Frontend | `app.routes.ts`, `app.ts`, `app.spec.ts` | modify |
 | Frontend | `partners/partner-list`, `partner-detail`; `course-groups/course-group-list`, `course-group-detail`; `publish-statuses/publish-status-list`, `publish-status-detail` (ts, html, spec) | modify — 查看課程 button |
+| Frontend | `features/courses/course-list/` (ts, html, spec) | modify — in-place cell editing |
 | Docs | `CLAUDE.md` | modify — Features list |

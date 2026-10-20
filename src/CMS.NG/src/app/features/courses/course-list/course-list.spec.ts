@@ -9,7 +9,7 @@ import { PartnerService } from '../../partners/partner.service';
 import { PublishStatusService } from '../../publish-statuses/publish-status.service';
 import { Course } from '../course.model';
 import { CourseService } from '../course.service';
-import { CourseList } from './course-list';
+import { CourseList, EditableField } from './course-list';
 
 const base: Omit<Course, 'pkid' | 'title' | 'courseId' | 'displayOrder' | 'partner' | 'courseGroup' | 'canRepeat'> = {
   officialTitle: null, prodCourseId: 'P', friendlyUrl: 'f', partnerPkid: 1, courseGroupPkid: null,
@@ -38,9 +38,17 @@ describe('CourseList', () => {
   let messages: MessageService;
 
   async function setup(queryParams: Record<string, string> = {}) {
-    service = jasmine.createSpyObj<CourseService>('CourseService', ['query', 'delete']);
+    service = jasmine.createSpyObj<CourseService>('CourseService', ['query', 'delete', 'get', 'update']);
     service.query.and.returnValue(of(courses));
     service.delete.and.returnValue(of(undefined));
+    // Single-record reads carry the n-n keys the list rows lack.
+    service.get.and.callFake((id: number) =>
+      of({ ...courses.find((c) => c.pkid === id)!, certificationPkids: [5], jobCategoryPkids: [7] }),
+    );
+    service.update.and.callFake((request) => {
+      const current = courses.find((c) => c.pkid === request.pkid)!;
+      return of({ ...current, ...request });
+    });
     const partners = jasmine.createSpyObj<PartnerService>('PartnerService', ['getLookups']);
     partners.getLookups.and.returnValue(of([{ pkid: 1, name: 'Microsoft' }]));
     const groups = jasmine.createSpyObj<CourseGroupService>('CourseGroupService', ['getLookups']);
@@ -183,6 +191,212 @@ describe('CourseList', () => {
       expect(add).toHaveBeenCalledWith(
         jasmine.objectContaining({ severity: 'error', detail: jasmine.stringContaining('無法刪除') }),
       );
+    });
+  });
+
+  describe('inline editing', () => {
+    beforeEach(async () => await setup());
+
+    /** Cell of the first rendered row (pkid 2, sorted by displayOrder). */
+    function cell(field: string): HTMLTableCellElement {
+      const row = (fixture.nativeElement as HTMLElement).querySelector('tbody tr')!;
+      return row.querySelector(`td[data-field="${field}"]`) as HTMLTableCellElement;
+    }
+
+    async function dblclick(field: string) {
+      cell(field).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+    }
+
+    async function typeAndBlur(field: string, text: string) {
+      const input = cell(field).querySelector('input') as HTMLInputElement;
+      input.value = text;
+      input.dispatchEvent(new Event('input'));
+      input.dispatchEvent(new Event('blur'));
+      fixture.detectChanges();
+      await fixture.whenStable();
+    }
+
+    /** Opens an editor through the component, sets the draft and commits it. */
+    function commit(field: EditableField, value: unknown) {
+      component.startEdit(component.courses()[0], field);
+      component.cellEdit!.value = value;
+      component.commitEdit();
+      fixture.detectChanges();
+    }
+
+    it('a single click does not enter edit mode', () => {
+      cell('title').click();
+      fixture.detectChanges();
+
+      expect(component.cellEdit).toBeNull();
+      expect(cell('title').querySelector('input')).toBeNull();
+    });
+
+    it('a double-click enters edit mode with the current value', async () => {
+      await dblclick('title');
+
+      const input = cell('title').querySelector('input') as HTMLInputElement;
+      expect(input).not.toBeNull();
+      expect(input.value).toBe('CCNA 網路');
+      expect(component.cellEdit).toEqual(jasmine.objectContaining({ pkid: 2, field: 'title' }));
+    });
+
+    it('uses an editor matching each column type', async () => {
+      const editors: [string, string][] = [
+        ['displayOrder', 'p-inputnumber'],
+        ['courseId', 'input[pInputText]'],
+        ['prodCourseId', 'input[pInputText]'],
+        ['title', 'input[pInputText]'],
+        ['publishStatusPkid', 'p-select'],
+        ['scheduleOn', 'p-datepicker'],
+        ['scheduleOff', 'p-datepicker'],
+        ['hour', 'p-inputnumber'],
+        ['listPrice', 'p-inputnumber'],
+        ['learningCredit', 'p-inputnumber'],
+        ['canRepeat', 'p-checkbox'],
+      ];
+      for (const [field, selector] of editors) {
+        await dblclick(field);
+        expect(cell(field).querySelector(selector)).withContext(field).not.toBeNull();
+        component.cancelEdit();
+        fixture.detectChanges();
+      }
+    });
+
+    for (const field of ['pkid', 'partner', 'courseGroup']) {
+      it(`the read-only ${field} column cannot be edited`, async () => {
+        await dblclick(field);
+
+        expect(component.cellEdit).toBeNull();
+        expect(cell(field).querySelector('input, p-select, p-inputnumber')).toBeNull();
+      });
+    }
+
+    it('blur saves through the update endpoint, keeping the n-n keys', async () => {
+      await dblclick('title');
+      await typeAndBlur('title', '  CCNA 進階  ');
+
+      expect(service.get).toHaveBeenCalledWith(2);
+      expect(service.update).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          pkid: 2, title: 'CCNA 進階', courseId: 'CCNA', certificationPkids: [5], jobCategoryPkids: [7],
+        }),
+      );
+      expect(component.cellEdit).toBeNull();
+      expect(cell('title').textContent).toContain('CCNA 進階');
+    });
+
+    it('blur without a change does not call the endpoint', async () => {
+      await dblclick('title');
+      await typeAndBlur('title', 'CCNA 網路');
+
+      expect(service.update).not.toHaveBeenCalled();
+      expect(component.cellEdit).toBeNull();
+    });
+
+    it('Escape cancels without saving', async () => {
+      await dblclick('title');
+      const input = cell('title').querySelector('input') as HTMLInputElement;
+      input.value = 'x';
+      input.dispatchEvent(new Event('input'));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      fixture.detectChanges();
+
+      expect(component.cellEdit).toBeNull();
+      expect(service.update).not.toHaveBeenCalled();
+      expect(cell('title').textContent).toContain('CCNA 網路');
+    });
+
+    it('a cleared required field shows an inline error and stays in edit mode', async () => {
+      await dblclick('title');
+      await typeAndBlur('title', '   ');
+      fixture.detectChanges();
+
+      expect(service.update).not.toHaveBeenCalled();
+      expect(component.cellEdit?.error).toBe('必填');
+      expect(cell('title').querySelector('input')).not.toBeNull();
+      expect(cell('title').querySelector('.cell-error')?.textContent).toContain('必填');
+    });
+
+    for (const field of ['hour', 'listPrice', 'learningCredit'] as EditableField[]) {
+      it(`${field} must be a valid non-negative number`, () => {
+        commit(field, -1);
+        expect(component.cellEdit?.error).toBe('不可為負數');
+
+        component.cellEdit!.value = Number.NaN;
+        component.commitEdit();
+        expect(component.cellEdit?.error).toBe('請輸入有效數字');
+
+        component.cellEdit!.value = null;
+        component.commitEdit();
+        expect(component.cellEdit?.error).toBe('必填');
+
+        expect(service.update).not.toHaveBeenCalled();
+      });
+    }
+
+    it('accepts zero for a numeric field', () => {
+      commit('listPrice', 0);
+
+      expect(component.cellEdit).toBeNull();
+      expect(service.update).toHaveBeenCalledWith(jasmine.objectContaining({ listPrice: 0 }));
+    });
+
+    for (const field of ['scheduleOn', 'scheduleOff'] as EditableField[]) {
+      it(`${field} must be a valid, non-empty date`, () => {
+        commit(field, new Date(Number.NaN));
+        expect(component.cellEdit?.error).toBe('請輸入有效日期');
+
+        component.cellEdit!.value = null;
+        component.commitEdit();
+        expect(component.cellEdit?.error).toBe('必填');
+
+        expect(service.update).not.toHaveBeenCalled();
+      });
+    }
+
+    it('上架日期 may not be after 下架日期', () => {
+      commit('scheduleOn', new Date(2036, 0, 2)); // scheduleOff is 2036-01-01
+      expect(component.cellEdit?.error).toBe('上架日期不可晚於下架日期');
+      component.cancelEdit();
+
+      commit('scheduleOff', new Date(2025, 11, 31)); // scheduleOn is 2026-01-01
+      expect(component.cellEdit?.error).toBe('上架日期不可晚於下架日期');
+
+      expect(service.update).not.toHaveBeenCalled();
+    });
+
+    it('saves a valid date as ISO yyyy-MM-dd (same day as 下架日期 allowed)', () => {
+      commit('scheduleOn', new Date(2036, 0, 1));
+
+      expect(component.cellEdit).toBeNull();
+      expect(service.update).toHaveBeenCalledWith(jasmine.objectContaining({ scheduleOn: '2036-01-01' }));
+    });
+
+    it('saves 上架狀態 and 允許重聽 changes', () => {
+      commit('publishStatusPkid', 3);
+      expect(service.update).toHaveBeenCalledWith(jasmine.objectContaining({ publishStatusPkid: 3 }));
+
+      commit('canRepeat', true);
+      expect(service.update).toHaveBeenCalledWith(jasmine.objectContaining({ canRepeat: true }));
+    });
+
+    it('reverts the cell and shows an error when the save fails', async () => {
+      service.update.and.returnValue(throwError(() => new HttpErrorResponse({ status: 500 })));
+      const add = spyOn(messages, 'add');
+
+      await dblclick('title');
+      await typeAndBlur('title', 'CCNA 進階');
+      fixture.detectChanges();
+
+      expect(service.update).toHaveBeenCalled();
+      expect(component.courses()[0].title).toBe('CCNA 網路');
+      expect(cell('title').textContent).toContain('CCNA 網路');
+      expect(component.savingPkids().size).toBe(0);
+      expect(add).toHaveBeenCalledWith(jasmine.objectContaining({ severity: 'error' }));
     });
   });
 
