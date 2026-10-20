@@ -41,6 +41,13 @@ export class App {
         { label: '課程 Course', icon: 'pi-book', route: '/courses' },
       ],
     },
+    {
+      label: '首頁 Home',
+      icon: 'pi-home',
+      items: [
+        { label: '上稿作業 FeaturedPromoItem', icon: 'pi-megaphone', route: '/featured-promo-items' },
+      ],
+    },
   ];
 
   readonly openGroups = signal<Set<string>>(new Set(this.navGroups.map((g) => g.label)));

@@ -1,6 +1,18 @@
-import { addYears, parseIso, toIso } from './date.util';
+import { addDays, addYears, mondayOf, parseIso, toIso } from './date.util';
 
 describe('date.util', () => {
+  it('addDays() crosses month boundaries and goes backwards', () => {
+    expect(addDays(new Date(2026, 2, 30), 3)).toEqual(new Date(2026, 3, 2));
+    expect(addDays(new Date(2026, 2, 2), -7)).toEqual(new Date(2026, 1, 23));
+  });
+
+  it('mondayOf() returns the Monday of a Monday–Sunday week', () => {
+    expect(mondayOf(new Date(2026, 2, 16))).toEqual(new Date(2026, 2, 16)); // Mon
+    expect(mondayOf(new Date(2026, 2, 18, 15, 30))).toEqual(new Date(2026, 2, 16)); // Wed afternoon
+    expect(mondayOf(new Date(2026, 2, 22))).toEqual(new Date(2026, 2, 16)); // Sun
+    expect(mondayOf(new Date(2026, 2, 23))).toEqual(new Date(2026, 2, 23)); // next Mon
+  });
+
   it('toIso() uses local date components and zero-pads', () => {
     expect(toIso(new Date(2026, 0, 5))).toBe('2026-01-05');
     expect(toIso(new Date(2026, 11, 31, 23, 59))).toBe('2026-12-31');

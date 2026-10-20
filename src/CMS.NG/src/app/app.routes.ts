@@ -172,5 +172,13 @@ export const routes: Routes = [
       },
     ],
   },
+  {
+    // Single page: Edit / New are inline forms on the list (see spec/custom/FeaturedPromoItem).
+    path: 'featured-promo-items',
+    loadComponent: () =>
+      import('./features/featured-promo-items/featured-promo-item-list/featured-promo-item-list').then(
+        (m) => m.FeaturedPromoItemList,
+      ),
+  },
   { path: '**', redirectTo: 'app-roles' },
 ];

@@ -79,6 +79,19 @@ describe('App', () => {
     expect(link.getAttribute('href')).toBe('/courses');
   });
 
+  it('should show the FeaturedPromoItem entry under 首頁 Home', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const groups = Array.from(el.querySelectorAll('.nav-group')).map((g) => g.textContent?.trim());
+    expect(groups).toContain('首頁 Home');
+    const links = Array.from(el.querySelectorAll('a.nav-item'));
+    const link = links.find((a) => a.textContent?.includes('上稿作業 FeaturedPromoItem')) as HTMLAnchorElement;
+    expect(link).toBeDefined();
+    expect(link.getAttribute('href')).toBe('/featured-promo-items');
+  });
+
   it('should collapse and expand a nav group', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();

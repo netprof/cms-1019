@@ -22,6 +22,16 @@ export function parseIso(value: string | null | undefined): Date | null {
   return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
 }
 
+/** Local midnight `days` after `date` (negative goes back). */
+export function addDays(date: Date, days: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+
+/** Local midnight of the Monday that starts the Monday–Sunday week containing `date`. */
+export function mondayOf(date: Date): Date {
+  return addDays(date, -((date.getDay() + 6) % 7));
+}
+
 /** Same calendar day `years` later (local). */
 export function addYears(date: Date, years: number): Date {
   return new Date(date.getFullYear() + years, date.getMonth(), date.getDate());

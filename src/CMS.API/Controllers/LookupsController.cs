@@ -12,8 +12,12 @@ public class LookupsController(
     IPublishStatusRepository publishStatuses,
     IPartnerRepository partners,
     ICourseGroupRepository courseGroups,
-    ICourseRepository courses) : ControllerBase
+    ICourseRepository courses,
+    IFeaturedPromoItemRepository featuredPromoItems) : ControllerBase
 {
+    /// <summary>Upper bound on promotion search results (Promotion2 has 1000+ rows).</summary>
+    private const int PromotionSearchLimit = 20;
+
     [HttpGet("appusers")]
     public async Task<ActionResult<IEnumerable<AppUserLookup>>> GetAppUsers() =>
         Ok(await appRoles.GetUserLookupsAsync());
@@ -41,4 +45,13 @@ public class LookupsController(
     [HttpGet("jobcategories")]
     public async Task<ActionResult<IEnumerable<JobCategoryLookup>>> GetJobCategories() =>
         Ok(await courses.GetJobCategoryLookupsAsync());
+
+    [HttpGet("trainingcenters")]
+    public async Task<ActionResult<IEnumerable<TrainingCenterLookup>>> GetTrainingCenters() =>
+        Ok(await featuredPromoItems.GetTrainingCenterLookupsAsync());
+
+    /// <summary>PromoCode search (contains, newest first) for the FeaturedPromoItem form's autocomplete.</summary>
+    [HttpGet("promotions")]
+    public async Task<ActionResult<IEnumerable<PromotionLookup>>> GetPromotions([FromQuery] string? keyword) =>
+        Ok(await featuredPromoItems.SearchPromotionLookupsAsync(keyword, PromotionSearchLimit));
 }

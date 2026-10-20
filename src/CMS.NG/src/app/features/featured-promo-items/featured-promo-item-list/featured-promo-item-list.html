@@ -1,0 +1,71 @@
+<p-toast />
+<p-confirmdialog />
+
+<div class="page-header">
+  <h1>上稿作業 FeaturedPromoItem <small>首頁每日推廣項目</small></h1>
+</div>
+
+<div class="card">
+  <p-tabs [value]="trainingCenterPkid() ?? undefined" (valueChange)="selectCenter($event)">
+    <p-tablist>
+      @for (c of trainingCenters(); track c.pkid) {
+        <p-tab [value]="c.pkid">{{ c.name }}</p-tab>
+      }
+    </p-tablist>
+  </p-tabs>
+
+  <div class="week-nav">
+    <p-button id="prev-week" icon="pi pi-angle-double-left" [text]="true" ariaLabel="上一週" (onClick)="shiftWeek(-1)" />
+    <span id="week-label">{{ weekLabel() }}</span>
+    <p-button id="next-week" icon="pi pi-angle-double-right" [text]="true" ariaLabel="下一週" (onClick)="shiftWeek(1)" />
+    <p-button id="this-week" label="本週" size="small" severity="secondary" [outlined]="true" (onClick)="thisWeek()" />
+    @if (loading()) { <i class="pi pi-spin pi-spinner"></i> }
+  </div>
+
+  @for (day of days(); track day.iso) {
+    <div class="day" [attr.data-day]="day.iso">
+      <div class="day-header">{{ day.label }}</div>
+      @for (row of day.slots; track row.slot) {
+        @if (isEditing(day, row)) {
+          <div class="editing" [attr.data-slot]="row.slot">
+            <span class="slot-no">{{ row.slot }}</span>
+            <app-featured-promo-item-form
+              [item]="editing()!.item"
+              [preset]="editing()!.preset"
+              [scheduleOn]="day.iso"
+              [trainingCenterPkid]="trainingCenterPkid()!"
+              [slot]="row.slot"
+              (saved)="onSaved($event)"
+              (cancelled)="onCancelled()"
+            />
+          </div>
+        } @else {
+          <div class="slot-row" [attr.data-slot]="row.slot">
+            <span class="slot-no">{{ row.slot }}</span>
+            <span class="slot-actions">
+              <p-button class="move-down" icon="pi pi-plus" [text]="true" size="small" pTooltip="下移 (Slot +1)"
+                ariaLabel="下移" [disabled]="!row.item || row.slot === slots[slots.length - 1]" (onClick)="moveDown(row.item!)" />
+              <p-button class="move-up" icon="pi pi-minus" [text]="true" size="small" pTooltip="上移 (Slot −1)"
+                ariaLabel="上移" [disabled]="!row.item || row.slot === slots[0]" (onClick)="moveUp(row.item!)" />
+              <p-button class="edit" icon="pi pi-pencil" [text]="true" size="small" pTooltip="編輯"
+                ariaLabel="編輯" (onClick)="edit(day, row)" />
+              @if (row.item) {
+                <p-button class="copy" icon="pi pi-copy" [text]="true" size="small" severity="secondary" pTooltip="複製"
+                  ariaLabel="複製" (onClick)="copy(row.item)" />
+                <p-button class="delete" icon="pi pi-trash" [text]="true" size="small" severity="danger" pTooltip="刪除"
+                  ariaLabel="刪除" (onClick)="remove(row.item)" />
+              } @else {
+                <p-button class="paste" icon="pi pi-clipboard" [text]="true" size="small" severity="secondary"
+                  [pTooltip]="clip() ? '貼上 ' + clip()!.promotion.promoCode : '請先複製'" ariaLabel="貼上"
+                  [disabled]="!clip()" (onClick)="paste(day, row)" />
+              }
+            </span>
+            <span class="cell promo-code">{{ row.item?.promotion?.promoCode }}</span>
+            <span class="cell topic" [title]="row.item?.topic ?? ''">{{ row.item?.topic }}</span>
+            <span class="cell description" [title]="row.item?.description ?? ''">{{ row.item?.description }}</span>
+          </div>
+        }
+      }
+    </div>
+  }
+</div>
