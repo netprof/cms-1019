@@ -102,6 +102,26 @@ CREATE TABLE [dbo].[SysConfig](
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 GO
+/****** Object:  Table [dbo].[ModelPrice]    Claude model prices, USD per million tokens ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ModelPrice](
+	[Model] [nvarchar](100) NOT NULL,
+	[EffectiveDate] [date] NOT NULL,
+	[InputPrice] [decimal](18, 6) NOT NULL,
+	[CacheWrite5mPrice] [decimal](18, 6) NOT NULL,
+	[CacheWrite1hPrice] [decimal](18, 6) NOT NULL,
+	[CacheReadPrice] [decimal](18, 6) NOT NULL,
+	[OutputPrice] [decimal](18, 6) NOT NULL,
+ CONSTRAINT [PK_ModelPrice] PRIMARY KEY CLUSTERED
+(
+	[Model] ASC,
+	[EffectiveDate] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
 
 GO
 ALTER TABLE [dbo].[AppRole] ADD  CONSTRAINT [DF_AppRole_Privilege]  DEFAULT ((100)) FOR [PermissionLevel]
@@ -120,4 +140,16 @@ ALTER TABLE [dbo].[AppUserRole] CHECK CONSTRAINT [FK_AppUserRole_AppUser]
 GO
 
 
+GO
+-- ModelPrice seed: Claude 5 family, official Anthropic first-party pricing
+-- (https://platform.claude.com/docs/en/about-claude/pricing, read 2026-10-20).
+-- Haiku 5.5 uses its <=100K-token prompt tier; prompts over 100K cost 5x.
+INSERT INTO [dbo].[ModelPrice] ([Model], [EffectiveDate], [InputPrice], [CacheWrite5mPrice], [CacheWrite1hPrice], [CacheReadPrice], [OutputPrice]) VALUES
+(N'claude-fable-5-1',  '2026-01-01', 10.00, 12.50, 20.00, 0.25, 50.00),
+(N'claude-fable-5',    '2026-01-01', 10.00, 12.50, 20.00, 1.00, 50.00),
+(N'claude-opus-5-5',   '2026-01-01',  4.00,  5.00,  8.00, 0.20, 20.00),
+(N'claude-opus-5',     '2026-01-01',  5.00,  6.25, 10.00, 0.50, 25.00),
+(N'claude-sonnet-5-5', '2026-01-01',  2.00,  2.50,  4.00, 0.10, 10.00),
+(N'claude-sonnet-5',   '2026-01-01',  2.00,  2.50,  4.00, 0.20, 10.00),
+(N'claude-haiku-5-5',  '2026-01-01',  0.10, 0.125,  0.20, 0.01,  0.50)
 GO

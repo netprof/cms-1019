@@ -1,0 +1,88 @@
+<p-toast />
+<p-confirmdialog />
+
+<div class="page-header">
+  <h1>模型價格 ModelPrice <small>US$ / 百萬 tokens</small></h1>
+  <div class="actions">
+    <p-button
+      id="filter-button"
+      label="搜尋條件"
+      icon="pi pi-filter"
+      [severity]="hasFilters ? 'primary' : 'secondary'"
+      [outlined]="hasFilters"
+      (onClick)="drawerVisible.set(true)"
+    />
+    <p-button id="add-button" label="新增" icon="pi pi-plus" (onClick)="add()" />
+  </div>
+</div>
+
+<div class="card">
+  <p-table
+    [value]="prices()"
+    [loading]="loading()"
+    [paginator]="true"
+    [rows]="page.rows"
+    [first]="page.first"
+    [rowsPerPageOptions]="[10, 20, 50]"
+    [showCurrentPageReport]="true"
+    currentPageReportTemplate="{first}–{last} 筆，共 {totalRecords} 筆"
+    [sortField]="sort.field"
+    [sortOrder]="sort.order"
+    (onSort)="onSort($event)"
+    (onPage)="onPage($event)"
+    [tableStyle]="{ 'min-width': '60rem' }"
+  >
+    <ng-template #header>
+      <tr>
+        <th pSortableColumn="model">模型 <p-sortIcon field="model" /></th>
+        <th pSortableColumn="effectiveDate" style="width: 9rem">生效日 <p-sortIcon field="effectiveDate" /></th>
+        <th pSortableColumn="inputPrice" style="text-align: right">輸入 <p-sortIcon field="inputPrice" /></th>
+        <th pSortableColumn="cacheWrite5mPrice" style="text-align: right">快取寫入 5m <p-sortIcon field="cacheWrite5mPrice" /></th>
+        <th pSortableColumn="cacheWrite1hPrice" style="text-align: right">快取寫入 1h <p-sortIcon field="cacheWrite1hPrice" /></th>
+        <th pSortableColumn="cacheReadPrice" style="text-align: right">快取讀取 <p-sortIcon field="cacheReadPrice" /></th>
+        <th pSortableColumn="outputPrice" style="text-align: right">輸出 <p-sortIcon field="outputPrice" /></th>
+        <th style="width: 10rem; text-align: center">操作</th>
+      </tr>
+    </ng-template>
+    <ng-template #body let-p>
+      <tr>
+        <td>{{ p.model }}</td>
+        <td>{{ p.effectiveDate }}</td>
+        <td style="text-align: right">{{ p.inputPrice | number: '1.2-6' }}</td>
+        <td style="text-align: right">{{ p.cacheWrite5mPrice | number: '1.2-6' }}</td>
+        <td style="text-align: right">{{ p.cacheWrite1hPrice | number: '1.2-6' }}</td>
+        <td style="text-align: right">{{ p.cacheReadPrice | number: '1.2-6' }}</td>
+        <td style="text-align: right">{{ p.outputPrice | number: '1.2-6' }}</td>
+        <td style="text-align: center">
+          <p-button icon="pi pi-eye" [text]="true" severity="secondary" ariaLabel="檢視" (onClick)="view(p)" />
+          <p-button icon="pi pi-pencil" [text]="true" ariaLabel="編輯" (onClick)="edit(p)" />
+          <p-button icon="pi pi-trash" [text]="true" severity="danger" ariaLabel="刪除" (onClick)="remove(p)" />
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template #emptymessage>
+      <tr>
+        <td colspan="8" style="text-align: center">沒有符合的資料</td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>
+
+<p-drawer header="搜尋條件" position="right" [visible]="drawerVisible()" (visibleChange)="drawerVisible.set($event)">
+  <div class="field">
+    <label for="f-keyword">關鍵字</label>
+    <input pInputText id="f-keyword" [(ngModel)]="filters.keyword" placeholder="模型" (keyup.enter)="applyFilters()" />
+  </div>
+  <div class="field">
+    <label for="f-effectiveDateFrom">生效日（起）</label>
+    <p-datepicker inputId="f-effectiveDateFrom" [(ngModel)]="dates.effectiveDateFrom" dateFormat="yy-mm-dd" [showIcon]="true" [showClear]="true" appendTo="body" [style]="{ width: '100%' }" />
+  </div>
+  <div class="field">
+    <label for="f-effectiveDateTo">生效日（迄）</label>
+    <p-datepicker inputId="f-effectiveDateTo" [(ngModel)]="dates.effectiveDateTo" dateFormat="yy-mm-dd" [showIcon]="true" [showClear]="true" appendTo="body" [style]="{ width: '100%' }" />
+  </div>
+  <div class="actions" style="display: flex; gap: 0.5rem">
+    <p-button label="搜尋" icon="pi pi-search" (onClick)="applyFilters()" />
+    <p-button label="清除" icon="pi pi-times" severity="secondary" (onClick)="clearFilters()" />
+  </div>
+</p-drawer>

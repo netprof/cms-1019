@@ -11,6 +11,7 @@ Recipes for cases that come up when adding a feature. Each names the feature tha
 
 - **String PK** (`AppRole.RoleId`, `AppUser.UserId`): the `pkid` identity column is a read-only surrogate, not the key. Controller route is `{id}` with no `:int`; the Angular service calls `encodeURIComponent(id)`.
 - **User-supplied numeric PK** (`PublishStatus.pkid tinyint`): `POST` returns 409 on a duplicate; the key field is editable on add and locked on edit. Edit mode disables the control, so read the form with `getRawValue()`.
+- **Composite user-supplied key** (`ModelPrice`: `Model` + `EffectiveDate`): routes carry every key part (`/api/modelprices/{model}/{yyyy-MM-dd}`, Angular `:model/:date`), `POST` returns 409 on a duplicate, and all key fields are locked on edit.
 - **`smallint IDENTITY`** (`Partner`, `CourseGroup`): C# `short`; the key is displayed read-only in edit mode and is not a form control.
 
 ## Server-controlled columns

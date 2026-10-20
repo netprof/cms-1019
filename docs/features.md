@@ -50,3 +50,13 @@ Custom (non-table) page: one tab per `TrainingCenter` (`DisplayOrder, pkid`), a 
 - Promotion is returned as a nav object (`promotion.promoCode/topic/description`). The form's PromoCode field is a `p-autocomplete` over `GET /api/lookups/promotions?keyword=` (contains, newest first, `TOP 20` — Promotion2 has 1000+ rows); picking one sets `promotionPkid` and copies its Topic/Description into the form.
 - Copy / Paste is client-side only (a signal on the list page); Paste opens a New form pre-filled with the copied values. The saved tab and week live in `featuredpromoitem-list-filters`.
 - Lookups `/api/lookups/trainingcenters` and `/api/lookups/promotions` live on `IFeaturedPromoItemRepository` (no TrainingCenter / Promotion2 feature yet). Week helpers `mondayOf` / `addDays` are in `core/utils/date.util.ts`. Spec: `spec/custom/FeaturedPromoItem/FeaturedPromoItem.spec.md`. Menu: `首頁 Home → 上稿作業 FeaturedPromoItem`.
+
+## ModelPrice (`admin.sql`)
+
+List/filter, view, add, edit, delete of Claude model prices: five USD-per-million-token rates (input, 5-minute cache write, 1-hour cache write, cache read, output) as `decimal(18,6)`.
+
+- Composite key (`Model nvarchar(100)`, `EffectiveDate date`), no `pkid`. Routes are `/api/modelprices/{model}/{yyyy-MM-dd}` and `/model-prices/:model/:date[/edit]`; the Angular service `encodeURIComponent`s the model. `POST` returns 409 on a duplicate key (also maps SQL 2627); both key fields are locked in edit mode.
+- Prices are validated `>= 0` with `[Range(typeof(decimal), …)]`, because `[Range(int, int)]` truncates `-0.01` to 0 and accepts it.
+- No FKs and no lookup endpoint; `TokenUsage.Model` matches by value. Sorts by `Model, EffectiveDate DESC`. Filters: keyword (Model), `EffectiveDateFrom/To` (inclusive).
+- Seeded in `admin.sql` with the Claude 5 family (`claude-fable-5-1`, `claude-fable-5`, `claude-opus-5-5`, `claude-opus-5`, `claude-sonnet-5-5`, `claude-sonnet-5`, `claude-haiku-5-5`), effective `2026-01-01`, from the official pricing page as read 2026-10-20. Haiku 5.5 is seeded at its ≤100K-token prompt tier only.
+- Cost calculation and recompute on price changes are ticket #5, not this feature. Spec: `spec/admin/ModelPrice.md`. Menu: `系統管理 Admin → 模型價格 ModelPrice`.
