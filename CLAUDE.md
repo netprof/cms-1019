@@ -37,3 +37,17 @@ cd src\CMS.NG; npx ng build
 - Source files contain Chinese UI text and must stay UTF-8: use the Edit/Write tools, never PowerShell 5.1 `Get-Content`/`Set-Content` without `-Encoding utf8`.
 - A running `dotnet run` locks `bin\Debug`, so `dotnet test` fails with a file-lock error: stop the server or use `-c Release`.
 - Files use LF; Git's CRLF warnings on Windows are harmless.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues (`netprof/cms-1019`) via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`, plus `spec` on every issue `/to-spec` publishes. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` + `docs/adr/` (created lazily). See `docs/agents/domain.md`.
