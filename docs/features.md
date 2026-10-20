@@ -60,3 +60,13 @@ List/filter, view, add, edit, delete of Claude model prices: five USD-per-millio
 - No FKs and no lookup endpoint; `TokenUsage.Model` matches by value. Sorts by `Model, EffectiveDate DESC`. Filters: keyword (Model), `EffectiveDateFrom/To` (inclusive).
 - Seeded in `admin.sql` with the Claude 5 family (`claude-fable-5-1`, `claude-fable-5`, `claude-opus-5-5`, `claude-opus-5`, `claude-sonnet-5-5`, `claude-sonnet-5`, `claude-haiku-5-5`), effective `2026-01-01`, from the official pricing page as read 2026-10-20. Haiku 5.5 is seeded at its ≤100K-token prompt tier only.
 - Cost calculation and recompute on price changes are ticket #5, not this feature. Spec: `spec/admin/ModelPrice.md`. Menu: `系統管理 Admin → 模型價格 ModelPrice`.
+
+## TokenUsage ingest (`admin.sql`)
+
+API only (no UI yet): `POST /api/tokenusages` receives one Claude Code session's usage `{ sessionId, userId, project, rows: [{ date, model, inputTokens, cacheWrite5mTokens, cacheWrite1hTokens, cacheReadTokens, outputTokens }] }` from the SessionEnd hook and returns 204.
+
+- Composite PK `(SessionId, UsageDate, Model)`, no `pkid`; FK `UserId` → `AppUser`. `UsageDate` is a Taipei (UTC+8) date; `UpdatedTime` is UTC.
+- First authenticated endpoint: `X-Api-Key` must equal SysConfig row `tokenUsageConfig` (JSON property `apiKey`, read by `ITokenUsageRepository.GetIngestApiKeyAsync`; missing → 500). The check is the `[RequireIngestApiKey]` authorization filter, so a bad key is 401 before model validation. All other endpoints stay anonymous.
+- 400 (`ValidationProblem`): required / over-length `sessionId` (100), `userId` (200), `project` (200), `model` (100); unknown or inactive user; negative tokens; `date` after today in Taipei (clock via injected `TimeProvider`, fixed +8 offset); duplicate (date, model). Text is trimmed and model duplicates are compared case-insensitively, matching SQL Server key comparison.
+- `ReplaceSessionAsync` deletes the session's rows and inserts the new ones in one transaction (verified: a failing insert rolls the delete back). Re-posting replaces; empty `rows` clears the session.
+- `Cost` is always `NULL` for now (pricing pending).

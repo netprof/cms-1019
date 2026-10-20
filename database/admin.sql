@@ -153,3 +153,39 @@ INSERT INTO [dbo].[ModelPrice] ([Model], [EffectiveDate], [InputPrice], [CacheWr
 (N'claude-sonnet-5',   '2026-01-01',  2.00,  2.50,  4.00, 0.20, 10.00),
 (N'claude-haiku-5-5',  '2026-01-01',  0.10, 0.125,  0.20, 0.01,  0.50)
 GO
+/****** Object:  Table [dbo].[TokenUsage]    Claude Code token usage per (session, Taipei date, model) ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[TokenUsage](
+	[SessionId] [nvarchar](100) NOT NULL,
+	[UsageDate] [date] NOT NULL,
+	[Model] [nvarchar](100) NOT NULL,
+	[UserId] [nvarchar](200) NOT NULL,
+	[Project] [nvarchar](200) NOT NULL,
+	[InputTokens] [bigint] NOT NULL,
+	[CacheWrite5mTokens] [bigint] NOT NULL,
+	[CacheWrite1hTokens] [bigint] NOT NULL,
+	[CacheReadTokens] [bigint] NOT NULL,
+	[OutputTokens] [bigint] NOT NULL,
+	[Cost] [decimal](18, 6) NULL,
+	[UpdatedTime] [datetime] NOT NULL,
+ CONSTRAINT [PK_TokenUsage] PRIMARY KEY CLUSTERED 
+(
+	[SessionId] ASC,
+	[UsageDate] ASC,
+	[Model] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[TokenUsage]  WITH CHECK ADD  CONSTRAINT [FK_TokenUsage_AppUser] FOREIGN KEY([UserId])
+REFERENCES [dbo].[AppUser] ([UserId])
+GO
+ALTER TABLE [dbo].[TokenUsage] CHECK CONSTRAINT [FK_TokenUsage_AppUser]
+GO
+/****** SysConfig row: shared X-Api-Key for POST /api/tokenusages (replace the placeholder per environment) ******/
+IF NOT EXISTS (SELECT 1 FROM [dbo].[SysConfig] WHERE [configKey] = N'tokenUsageConfig')
+	INSERT INTO [dbo].[SysConfig] ([configKey], [configValue])
+	VALUES (N'tokenUsageConfig', N'{ "apiKey": "change-me-token-usage-api-key" }')
+GO

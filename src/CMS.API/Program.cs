@@ -20,6 +20,8 @@ builder.Services.AddScoped<ICourseGroupRepository, CourseGroupRepository>();
 builder.Services.AddScoped<ICourseRepository, CourseRepository>();
 builder.Services.AddScoped<IFeaturedPromoItemRepository, FeaturedPromoItemRepository>();
 builder.Services.AddScoped<IModelPriceRepository, ModelPriceRepository>();
+builder.Services.AddScoped<ITokenUsageRepository, TokenUsageRepository>();
+builder.Services.AddSingleton(TimeProvider.System);
 
 builder.Services.AddCors(options =>
 {
