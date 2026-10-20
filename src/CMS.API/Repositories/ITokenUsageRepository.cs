@@ -21,4 +21,10 @@ public interface ITokenUsageRepository
     /// Unordered and unpaged; the controller sorts, pages and totals.
     /// </summary>
     Task<IReadOnlyList<TokenUsageReportRow>> GetReportRowsAsync(TokenUsageReportFilter filter);
+
+    /// <summary>Every row for <paramref name="model"/> (all sessions and dates), for cost recompute.</summary>
+    Task<IEnumerable<TokenUsage>> GetByModelAsync(string model);
+
+    /// <summary>Writes each row's <c>Cost</c> back by its key (SessionId, UsageDate, Model), in one transaction.</summary>
+    Task UpdateCostsAsync(IReadOnlyList<TokenUsage> rows);
 }

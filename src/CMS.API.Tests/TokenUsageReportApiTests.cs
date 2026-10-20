@@ -23,6 +23,8 @@ public class TokenUsageReportApiTests : IClassFixture<WebApplicationFactory<Prog
         {
             services.RemoveAll<ITokenUsageRepository>();
             services.AddSingleton<ITokenUsageRepository>(_repository);
+            services.RemoveAll<IModelPriceRepository>(); // the controller also prices ingest; the report never does
+            services.AddSingleton<IModelPriceRepository>(new FakeModelPriceRepository());
         }));
     }
 

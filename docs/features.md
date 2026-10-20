@@ -51,15 +51,33 @@ Custom (non-table) page: one tab per `TrainingCenter` (`DisplayOrder, pkid`), a 
 - Copy / Paste is client-side only (a signal on the list page); Paste opens a New form pre-filled with the copied values. The saved tab and week live in `featuredpromoitem-list-filters`.
 - Lookups `/api/lookups/trainingcenters` and `/api/lookups/promotions` live on `IFeaturedPromoItemRepository` (no TrainingCenter / Promotion2 feature yet). Week helpers `mondayOf` / `addDays` are in `core/utils/date.util.ts`. Spec: `spec/custom/FeaturedPromoItem/FeaturedPromoItem.spec.md`. Menu: `首頁 Home → 上稿作業 FeaturedPromoItem`.
 
+## ModelPrice (`admin.sql`)
+
+List/filter, view, add, edit, delete of Claude model prices: five USD-per-million-token rates (input, 5-minute cache write, 1-hour cache write, cache read, output) as `decimal(18,6)`.
+
+- Composite key (`Model nvarchar(100)`, `EffectiveDate date`), no `pkid`. Routes are `/api/modelprices/{model}/{yyyy-MM-dd}` and `/model-prices/:model/:date[/edit]`; the Angular service `encodeURIComponent`s the model. `POST` returns 409 on a duplicate key (also maps SQL 2627); both key fields are locked in edit mode.
+- Prices are validated `>= 0` with `[Range(typeof(decimal), …)]`, because `[Range(int, int)]` truncates `-0.01` to 0 and accepts it.
+- No FKs and no lookup endpoint; `TokenUsage.Model` matches by value. Sorts by `Model, EffectiveDate DESC`. Filters: keyword (Model), `EffectiveDateFrom/To` (inclusive).
+- Seeded in `admin.sql` with the Claude 5 family (`claude-fable-5-1`, `claude-fable-5`, `claude-opus-5-5`, `claude-opus-5`, `claude-sonnet-5-5`, `claude-sonnet-5`, `claude-haiku-5-5`), effective `2026-01-01`, from the official pricing page as read 2026-10-20. Haiku 5.5 is seeded at its ≤100K-token prompt tier only.
+- Create, update and delete recompute that model's `TokenUsage.Cost` (see TokenUsage pricing below). Spec: `spec/admin/ModelPrice.md`. Menu: `系統管理 Admin → 模型價格 ModelPrice`.
+
 ## TokenUsage ingest (`admin.sql`)
 
-API only (no UI yet): `POST /api/tokenusages` receives one Claude Code session's usage `{ sessionId, userId, project, rows: [{ date, model, inputTokens, cacheWrite5mTokens, cacheWrite1hTokens, cacheReadTokens, outputTokens }] }` from the SessionEnd hook and returns 204.
+API (the admin UI is the TokenUsage report below): `POST /api/tokenusages` receives one Claude Code session's usage `{ sessionId, userId, project, rows: [{ date, model, inputTokens, cacheWrite5mTokens, cacheWrite1hTokens, cacheReadTokens, outputTokens }] }` from the SessionEnd hook and returns 204.
 
 - Composite PK `(SessionId, UsageDate, Model)`, no `pkid`; FK `UserId` → `AppUser`. `UsageDate` is a Taipei (UTC+8) date; `UpdatedTime` is UTC.
 - First authenticated endpoint: `X-Api-Key` must equal SysConfig row `tokenUsageConfig` (JSON property `apiKey`, read by `ITokenUsageRepository.GetIngestApiKeyAsync`; missing → 500). The check is the `[RequireIngestApiKey]` authorization filter, so a bad key is 401 before model validation. All other endpoints stay anonymous.
 - 400 (`ValidationProblem`): required / over-length `sessionId` (100), `userId` (200), `project` (200), `model` (100); unknown or inactive user; negative tokens; `date` after today in Taipei (clock via injected `TimeProvider`, fixed +8 offset); duplicate (date, model). Text is trimmed and model duplicates are compared case-insensitively, matching SQL Server key comparison.
 - `ReplaceSessionAsync` deletes the session's rows and inserts the new ones in one transaction (verified: a failing insert rolls the delete back). Re-posting replaces; empty `rows` clears the session.
-- `Cost` is always `NULL` for now (pricing pending).
+- `Cost` is priced on ingest; see TokenUsage pricing.
+
+## TokenUsage pricing
+
+`TokenUsage.Cost` (USD, `decimal(18,6)`) = Σ tokens × per-million price over the five token types, rounded to 6 decimals. The price is the `ModelPrice` row for that model with the latest `EffectiveDate <= UsageDate`; with none, `Cost` is `NULL` and the row is still stored.
+
+- Logic is in C#, not SQL: `Services/TokenCostService` (scoped). `PriceAsync(rows)` is called by the ingest endpoint before `ReplaceSessionAsync`; `RecomputeModelAsync(model)` is called after a successful `ModelPrice` create, update or delete, so a delete falls back to an earlier price or to `NULL`.
+- Recompute reads every row of the model (`ITokenUsageRepository.GetByModelAsync`) and writes costs back by key (`UpdateCostsAsync`, one transaction). `UpdatedTime` is not touched: it stays the ingest time. Model matching is case-insensitive, like SQL Server.
+- Tests: `TokenUsagePricingApiTests` (effective date, NULL cost, rounding, recompute on create/update/delete). `TokenUsagesApiTests` and `ModelPricesApiTests` now also register the other fake repository, since each controller touches both.
 
 ## TokenUsage report (`admin.sql`)
 
@@ -70,4 +88,4 @@ Read-only report page `/token-usages` (hand-written, not `/crud`): filter bar, s
 - Unlike the other lists, paging and sorting are server-side (PrimeNG `[lazy]` table): the repository returns every aggregated row of the filtered set and the controller sorts, pages (`first` ≥ 0, `rows` 1–500) and totals in memory. `sortField` is whitelisted to the camelCase column names (unknown → 400), `sortOrder` is 1/-1; ties break by date desc, user, project, model. Default: `usageDate` desc, 20 rows.
 - `tokenIn` = input + both cache writes + cache read (computed by the API, on rows and totals). `cost` is `SUM(Cost)`, which ignores unpriced rows and is `NULL` only when nothing in the group (or the whole set) is priced; the page shows `NULL` as blank.
 - The page's date range defaults to the 1st of this month through today (local dates); 清除 restores that. Filters/sort/page persist in `tokenusage-report-filters` / `-sort` / `-page`.
-- Report SQL verified against the real `CMS` DB (aggregation across sessions, NULL-ignoring cost sum, inclusive range, contains filters, empty result).
+- Report SQL verified against the real `CMS` DB (aggregation across sessions, NULL-ignoring cost sum, inclusive range, contains filters, empty result). `TokenUsageReportApiTests` also registers a fake `IModelPriceRepository`, since `TokenUsagesController` now takes `TokenCostService`.

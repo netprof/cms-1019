@@ -90,6 +90,40 @@ export const routes: Routes = [
     ],
   },
   {
+    // Composite key (model, effectiveDate): detail/edit routes carry both parts.
+    path: 'model-prices',
+    children: [
+      {
+        path: '',
+        loadComponent: () =>
+          import('./features/model-prices/model-price-list/model-price-list').then(
+            (m) => m.ModelPriceList,
+          ),
+      },
+      {
+        path: 'new',
+        loadComponent: () =>
+          import('./features/model-prices/model-price-form/model-price-form').then(
+            (m) => m.ModelPriceForm,
+          ),
+      },
+      {
+        path: ':model/:date/edit',
+        loadComponent: () =>
+          import('./features/model-prices/model-price-form/model-price-form').then(
+            (m) => m.ModelPriceForm,
+          ),
+      },
+      {
+        path: ':model/:date',
+        loadComponent: () =>
+          import('./features/model-prices/model-price-detail/model-price-detail').then(
+            (m) => m.ModelPriceDetail,
+          ),
+      },
+    ],
+  },
+  {
     path: 'partners',
     children: [
       {
