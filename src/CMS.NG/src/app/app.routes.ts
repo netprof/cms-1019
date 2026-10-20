@@ -224,6 +224,11 @@ const appRoutes: Routes = [
         (m) => m.TokenUsageReport,
       ),
   },
+  {
+    // The signed-in user's own profile (UserName only); linked from the shell header.
+    path: 'profile',
+    loadComponent: () => import('./features/auth/my-profile/my-profile').then((m) => m.MyProfile),
+  },
   { path: '**', redirectTo: 'app-roles' },
 ];
 

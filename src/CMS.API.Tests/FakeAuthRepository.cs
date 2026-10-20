@@ -24,10 +24,40 @@ public class FakeAuthRepository(string? signingKey = FakeAuthRepository.SigningK
 
     // Mirrors the case-insensitive DB collation, so the controller's exact-match check is exercised.
     public Task<LoginCredential?> GetCredentialAsync(string userId) =>
-        Task.FromResult(_users.FirstOrDefault(u => string.Equals(u.UserId, userId, StringComparison.OrdinalIgnoreCase)));
+        Task.FromResult(Find(userId));
 
     public Task<IReadOnlyList<string>> GetRoleIdsAsync(string userId) =>
         Task.FromResult<IReadOnlyList<string>>(_roles.GetValueOrDefault(userId) ?? []);
+
+    public Task<bool> UpdateUserNameAsync(string userId, string userName)
+    {
+        var user = Find(userId);
+        if (user is not null) user.UserName = userName;
+        return Task.FromResult(user is not null);
+    }
+
+    private readonly Dictionary<string, DateTime> _passwordUpdatedTimes = new(StringComparer.OrdinalIgnoreCase);
+
+    public Task<bool> UpdatePasswordAsync(string userId, string passwordHash, DateTime updatedTime)
+    {
+        var user = Find(userId);
+        if (user is null) return Task.FromResult(false);
+        user.PasswordHash = passwordHash;
+        _passwordUpdatedTimes[user.UserId] = updatedTime;
+        return Task.FromResult(true);
+    }
+
+    /// <summary>Lets tests inspect what the controller stored.</summary>
+    public string? UserName(string userId) => Find(userId)?.UserName;
+
+    public string? StoredHash(string userId) => Find(userId)?.PasswordHash;
+
+    /// <returns>Null until a password change stamps it.</returns>
+    public DateTime? PasswordUpdatedTime(string userId) =>
+        _passwordUpdatedTimes.TryGetValue(userId, out var time) ? time : null;
+
+    private LoginCredential? Find(string userId) =>
+        _users.FirstOrDefault(u => string.Equals(u.UserId, userId, StringComparison.OrdinalIgnoreCase));
 
     public Task<string> GetJwtSigningKeyAsync() => signingKey is null
         ? throw new InvalidOperationException("SysConfig 'appConfig' has no symmetricSecurityKey.")

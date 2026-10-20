@@ -19,10 +19,6 @@ public interface IAppUserRepository
     /// <returns>The updated record, or null if the user does not exist.</returns>
     Task<AppUser?> UpdateAsync(AppUserRequest request);
 
-    /// <summary>Replaces PasswordHash and stamps PasswordUpdatedTime.</summary>
-    /// <returns>The updated record, or null if the user does not exist.</returns>
-    Task<AppUser?> ResetPasswordAsync(string userId, string passwordHash);
-
     /// <returns>False if the user does not exist.</returns>
     Task<bool> DeleteAsync(string userId);
 

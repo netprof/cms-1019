@@ -14,7 +14,7 @@ Scaffolding rules for a feature on table `{T}`. Design recipes for special cases
 
 - .NET 9 Web API, Dapper only (no EF); every controller/repository method is async. Connections come from `IDbConnectionFactory` (`ConnectionStrings:Default` in `appsettings.json`).
 - `Program` is `public partial` (tests use `WebApplicationFactory<Program>`), registers the Dapper `DateOnly`/`TimeOnly` handlers, and allows CORS from any loopback origin.
-- Every controller requires a JWT bearer token through the global `MapControllers().RequireAuthorization()`; do not add `[Authorize]`. Only actions that must be public get `[AllowAnonymous]` (today: `AuthController`, token usage ingest). See `docs\features.md` → Authorization.
+- Every controller requires a JWT bearer token through the global `MapControllers().RequireAuthorization()`, so a plain authenticated endpoint needs no attribute. Role-restricted actions add `[Authorize(Roles = AuthController.AdminRole)]` (today: `AuthController.ResetPassword`, 403 for others); public actions add `[AllowAnonymous]` (today: `AuthController.Login`, token usage ingest). See `docs\features.md` → Authorization.
 
 ### Models
 - `Models/{T}.cs` — response model (nav objects for FKs, subquery counts for n-n)

@@ -73,12 +73,12 @@ describe('AppUserService', () => {
     req.flush(null);
   });
 
-  it('resetPassword() POSTs an empty body to /appusers/{id}/reset-password', () => {
+  it('resetPassword() POSTs only the UserId to /auth/reset-password', () => {
     service.resetPassword('a b').subscribe();
-    const req = http.expectOne(`${base}/a%20b/reset-password`);
+    const req = http.expectOne(`${environment.apiBaseUrl}/auth/reset-password`);
     expect(req.request.method).toBe('POST');
-    expect(req.request.body).toBeNull();
-    req.flush({});
+    expect(req.request.body).toEqual({ userId: 'a b' });
+    req.flush(null, { status: 204, statusText: 'No Content' });
   });
 
   it('getRoleLookups() GETs /lookups/approles', () => {

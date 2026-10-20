@@ -134,20 +134,6 @@ public class AppUserRepository(IDbConnectionFactory connectionFactory) : IAppUse
         return await GetByIdAsync(request.UserId);
     }
 
-    public async Task<AppUser?> ResetPasswordAsync(string userId, string passwordHash)
-    {
-        using var conn = await connectionFactory.CreateOpenConnectionAsync();
-        var rows = await conn.ExecuteAsync(
-            """
-            UPDATE AppUser
-            SET PasswordHash = @passwordHash, PasswordUpdatedTime = @now
-            WHERE UserId = @userId
-            """, new { userId, passwordHash, now = DateTime.UtcNow });
-        if (rows == 0) return null;
-
-        return await GetByIdAsync(userId);
-    }
-
     public async Task<bool> DeleteAsync(string userId)
     {
         using var conn = await connectionFactory.CreateOpenConnectionAsync();

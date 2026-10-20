@@ -7,7 +7,7 @@ One entry per feature. Append an entry when a feature ships (the `/crud` skill's
 List/filter, view, add, edit, delete, reset-password, with role assignment (n-n via `AppUserRole`, mirror of AppRole's user list). String PK `UserId` (routes take `{id}` with no `:int`; `pkid` is a read-only surrogate).
 
 - `PasswordHash` is backend-only: absent from `AppUser`/`AppUserRequest`/Angular models and never selected.
-- `POST` sets it to `PasswordHasher.Sha256Hex(default)` where the default comes from `SysConfig` row `appConfig` (JSON property `defaultPassword`, read by `GetDefaultPasswordAsync`; missing → 500). `PUT` never touches it. `POST /api/appusers/{id}/reset-password` resets it to the default and stamps `PasswordUpdatedTime` (UTC).
+- `POST` sets it to `PasswordHasher.Sha256Hex(default)` where the default comes from `SysConfig` row `appConfig` (JSON property `defaultPassword`, read by `GetDefaultPasswordAsync`; missing → 500). `PUT` never touches it. Resetting to the default is Admin-only and lives in `AuthController` (see Reset password to default); the old `POST /api/appusers/{id}/reset-password` is gone.
 - Hash format is lowercase hex SHA-256 of the UTF-8 password (verified against the seeded row).
 - Filters: keyword, `IsActive` tri-state, `RoleId` (EXISTS on junction), `PasswordUpdatedFrom/To` (`DateOnly`, inclusive).
 - Lookup: `/api/lookups/approles`. Spec: `spec/auth/AppUser.md`. Menu: `系統管理 Admin → 使用者 AppUser`.
@@ -103,7 +103,7 @@ Read-only report page `/token-usages` (hand-written, not `/crud`): filter bar, s
 
 ## Authorization (JWT, end to end)
 
-Every API endpoint requires `Authorization: Bearer <token from /api/auth/login>` except `POST /api/auth/login` and the token usage ingest (`POST /api/tokenusages`, which the SessionEnd hook calls with its `X-Api-Key` and no JWT). No role-based restrictions on the API yet: any valid token reaches every endpoint.
+Every API endpoint requires `Authorization: Bearer <token from /api/auth/login>` except `POST /api/auth/login` and the token usage ingest (`POST /api/tokenusages`, which the SessionEnd hook calls with its `X-Api-Key` and no JWT). Role checks: only `POST /api/auth/reset-password` requires a role (`[Authorize(Roles = AuthController.AdminRole)]`, 403 otherwise); every other endpoint accepts any valid token.
 
 - Backend: `AddJwtBearer` + `app.MapControllers().RequireAuthorization()`; anonymous actions carry `[AllowAnonymous]`. Validation: HS256 signature and lifetime only (no `iss`/`aud`), `MapInboundClaims = false`, so `User` sees `sub`, `name` and `role` as issued. No token, a bad signature, an expired token or another scheme → 401 with `WWW-Authenticate: Bearer`.
 - Validation key: `Services/SysConfigSigningKeyManager` is the bearer handler's `ConfigurationManager` (the async hook for signing keys). It reads SysConfig `appConfig.symmetricSecurityKey` through `IAuthRepository` (the same key `JwtTokenService` signs with), caches it 5 minutes, and re-reads at once when a token's key is not found, so a rotated key takes effect on the next request. A missing key is logged as a warning and every token gets 401, not 500.
@@ -112,3 +112,32 @@ Every API endpoint requires `Authorization: Bearer <token from /api/auth/login>`
 - Logout (and a 401) clears **all** session storage, saved list filters included, then goes to `/login`. The shell (sidebar + header with UserName and 登出) renders only while signed in.
 - Sidebar: the `系統管理 Admin` group has `adminOnly: true` and shows only when the roles include `Admin` (exact case). Hiding the menu is not access control: a non-admin can still open admin URLs, and the default route `/` still redirects to `/app-roles`.
 - Verified against the real `CMS` DB: no token / garbage token → 401, login token → 200 on `/api/approles` and `/api/courses`, ingest still answered by its API-key filter.
+
+## My Profile
+
+`/profile` (`features/auth/my-profile`), reached from the signed-in UserName in the shell header (`#my-profile-link`). Shows UserId (disabled input), UserName (editable) and the token's roles as display-only tags. Only UserName can change.
+
+- `PUT /api/auth/profile` takes `{ userName }` (`UpdateProfileRequest`: `[Required, StringLength(200)]`, so blank or whitespace-only → 400; trimmed before saving). It updates `AppUser.UserName` for the token's `sub` claim. The UserId is never read from the body, and `userId` / `roleIds` / `isActive` in the body are ignored (the DTO has no such properties). A `sub` that no longer exists → 404. Returns `{ userId, userName }`.
+- Requires the bearer token like every other endpoint: only `Login` on `AuthController` carries `[AllowAnonymous]`.
+- `AuthService.updateProfile` writes the new name into the stored `cms-auth` profile and the `profile` signal, so the header updates at once. The access token is not reissued: its `name` claim keeps the old value until the next login (nothing reads it).
+- Verified against the real `CMS` DB (UserName changed and restored, a body `userId`/`roleIds` ignored, blank → 400, no token → 401).
+
+## Change password (My Profile)
+
+Second card on `/profile` (`#password-form`): 目前密碼 / 新密碼 / 確認新密碼, its own 變更密碼 button (not the page's 儲存 toolbar).
+
+- `POST /api/auth/change-password` takes `{ currentPassword, newPassword, confirmPassword }` (plain text, never trimmed) for the token's `sub`. It checks all three rules and returns one 400 ValidationProblem keyed by field (`CurrentPassword` when SHA-256 of it differs from the stored hash, `NewPassword` with the bilingual policy message, `ConfirmPassword` when it differs). Nothing is written unless all pass. On success it stores `PasswordHasher.Sha256Hex(new)` and `PasswordUpdatedTime` = now (injected `TimeProvider`), and returns 204 with no body. No hash is ever sent or returned.
+- A wrong current password is 400, not 401: the client's interceptor treats any 401 as an expired session and signs out.
+- Complexity rule lives twice and must stay in step: `Services/PasswordPolicy.cs` and `core/auth/password-policy.ts` (same test cases in `PasswordPolicyTests` and `password-policy.spec.ts`). ≥ 8 characters and ≥ 3 of: A–Z, a–z, 0–9, symbol = any other non-whitespace character (so CJK characters count as symbols; spaces count only toward length).
+- The rule applies only to this self-service change. Creating a user and the admin reset still set SysConfig `defaultPassword`, which does not have to satisfy it. No rate limit on wrong current passwords, and existing tokens stay valid after a change.
+- Client: required / complexity / mismatch are checked before posting; the policy text shows as a hint under 新密碼 until there is an error. API field errors (matched by case-insensitive key) show under their field until it is edited; success resets the form and keeps the user signed in.
+- Verified against the real `CMS` DB (wrong current / weak / mismatch → 400 with the hash untouched; valid → 204, hash = SHA-256(new), time stamped, new password logs in; original hash and time restored afterwards).
+
+## Reset password to default (Admin)
+
+重設為預設密碼 on the AppUser edit form toolbar (edit mode only) and on the AppUser detail page. Both use the shared `features/app-users/reset-password-button` component, which renders nothing unless the token's roles include `Admin`, asks for confirmation (`p-confirmdialog key="reset-password"`, appended to body), and sends only the UserId.
+
+- `POST /api/auth/reset-password` takes `{ userId }` and requires the `Admin` role claim (`[Authorize(Roles = "Admin")]`, exact case): no token → 401, signed in without Admin → 403. It reads SysConfig `appConfig.defaultPassword` on each call (`IAppUserRepository.GetDefaultPasswordAsync`, injected per action with `[FromServices]`), stores its SHA-256 and stamps `PasswordUpdatedTime` (injected `TimeProvider`) via `IAuthRepository.UpdatePasswordAsync`. 204 with no body; unknown user → 404; blank `userId` → 400.
+- The detail page re-reads the user after a reset, since the response has no body.
+- Replaced `POST /api/appusers/{id}/reset-password`, which any signed-in user could call; it and `IAppUserRepository.ResetPasswordAsync` are removed.
+- Real-DB check: old route → 404, no token → 401. The Admin path was not exercised against the DB (the dev admin's password had been changed from the default, so the smoke test could not sign in); it is covered by `ResetPasswordApiTests`.

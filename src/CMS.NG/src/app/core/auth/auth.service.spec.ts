@@ -3,7 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { fakeToken, signIn } from '../testing/auth';
-import { AUTH_STORAGE_KEY, AuthService, LOGIN_URL } from './auth.service';
+import { AUTH_STORAGE_KEY, AuthService, LOGIN_URL, PROFILE_URL } from './auth.service';
 
 describe('AuthService', () => {
   let http: HttpTestingController;
@@ -48,6 +48,22 @@ describe('AuthService', () => {
   it('is not admin without the Admin role', () => {
     signIn(['User']);
     expect(create().isAdmin()).toBeFalse();
+  });
+
+  it('updateProfile() PUTs the UserName and refreshes only the name in storage and the signal', () => {
+    const before = signIn(['Admin'], 'Helen');
+    const service = create();
+
+    service.updateProfile('Helen Wang').subscribe();
+    const req = http.expectOne(PROFILE_URL);
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ userName: 'Helen Wang' });
+    req.flush({ userId: 'helen', userName: 'Helen Wang' });
+
+    const expected = { ...before, userName: 'Helen Wang' };
+    expect(JSON.parse(sessionStorage.getItem(AUTH_STORAGE_KEY)!)).toEqual(expected);
+    expect(service.profile()).toEqual(expected);
+    expect(service.roles()).toEqual(['Admin']);
   });
 
   it('logout() clears session storage and goes to the login page', () => {

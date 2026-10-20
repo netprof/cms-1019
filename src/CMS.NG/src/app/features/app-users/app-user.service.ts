@@ -33,9 +33,12 @@ export class AppUserService {
     return this.http.delete<void>(`${this.url}/${encodeURIComponent(id)}`);
   }
 
-  /** Resets the password to the system default; the password itself never reaches the client. */
-  resetPassword(id: string): Observable<AppUser> {
-    return this.http.post<AppUser>(`${this.url}/${encodeURIComponent(id)}/reset-password`, null);
+  /**
+   * Admin only (the API answers 403 otherwise): resets the user's password to the SysConfig
+   * default. Only the UserId is sent; no password or hash comes back (204).
+   */
+  resetPassword(userId: string): Observable<void> {
+    return this.http.post<void>(`${environment.apiBaseUrl}/auth/reset-password`, { userId });
   }
 
   getRoleLookups(): Observable<AppRoleLookup[]> {

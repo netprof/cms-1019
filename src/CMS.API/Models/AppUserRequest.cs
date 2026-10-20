@@ -4,7 +4,7 @@ namespace CMS.API.Models;
 
 /// <summary>
 /// Write DTO. No password fields: the hash is server-generated on create and
-/// only changed through the reset-password endpoint.
+/// only changed through <c>POST /api/auth/reset-password</c> (Admin) or the user's own change-password.
 /// </summary>
 public class AppUserRequest
 {

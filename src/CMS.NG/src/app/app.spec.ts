@@ -59,6 +59,15 @@ describe('App', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('#signed-in-user')?.textContent).toContain('王小明');
   });
 
+  it('links the signed-in UserName to the My Profile page', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const link = (fixture.nativeElement as HTMLElement).querySelector('#my-profile-link') as HTMLAnchorElement;
+
+    expect(link.getAttribute('href')).toBe('/profile');
+    expect(link.textContent).toContain('海倫');
+  });
+
   it('logs out: clears session storage and returns to the login page', () => {
     sessionStorage.setItem('course-filters', '{}');
     const fixture = TestBed.createComponent(App);

@@ -12,6 +12,7 @@ import { ToastModule } from 'primeng/toast';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { AppRoleLookup, AppUserRequest } from '../app-user.model';
 import { AppUserService } from '../app-user.service';
+import { ResetPasswordButton } from '../reset-password-button/reset-password-button';
 
 @Component({
   selector: 'app-app-user-form',
@@ -21,6 +22,7 @@ import { AppUserService } from '../app-user.service';
     InputTextModule,
     MessageModule,
     MultiSelectModule,
+    ResetPasswordButton,
     ToastModule,
     ToggleSwitchModule,
   ],

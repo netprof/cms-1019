@@ -29,7 +29,9 @@
 
   <main class="content">
     <header class="topbar">
-      <span id="signed-in-user"><i class="pi pi-user"></i> {{ profile.userName }}</span>
+      <a id="my-profile-link" class="user-link" routerLink="/profile" routerLinkActive="active" title="我的資料 My Profile">
+        <i class="pi pi-user"></i> <span id="signed-in-user">{{ profile.userName }}</span>
+      </a>
       <button type="button" id="logout-button" class="logout-btn" (click)="auth.logout()"><i class="pi pi-sign-out"></i> 登出</button>
     </header>
     <router-outlet />

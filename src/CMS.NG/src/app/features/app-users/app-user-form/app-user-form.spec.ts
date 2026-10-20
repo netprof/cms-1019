@@ -1,9 +1,10 @@
-import { HttpErrorResponse } from '@angular/common/http';
+import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of, throwError } from 'rxjs';
-import { MessageService } from 'primeng/api';
+import { ConfirmationService, MessageService } from 'primeng/api';
+import { signIn } from '@app/core/testing/auth';
 import { AppRoleLookup, AppUser } from '../app-user.model';
 import { AppUserService } from '../app-user.service';
 import { expectStickyToolbar } from '../../../core/testing/sticky-toolbar';
@@ -23,7 +24,10 @@ describe('AppUserForm', () => {
   let service: jasmine.SpyObj<AppUserService>;
   let router: Router;
 
-  async function setup(id: string | null): Promise<ComponentFixture<AppUserForm>> {
+  /** Signed in with <signedInRoles> (Admin by default): the reset button depends on them. */
+  async function setup(id: string | null, signedInRoles = ['Admin']): Promise<ComponentFixture<AppUserForm>> {
+    sessionStorage.clear();
+    signIn(signedInRoles);
     service = jasmine.createSpyObj<AppUserService>('AppUserService', ['get', 'create', 'update', 'getRoleLookups']);
     service.getRoleLookups.and.returnValue(of(roles));
     service.get.and.returnValue(of(user));
@@ -37,6 +41,8 @@ describe('AppUserForm', () => {
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap(id ? { id } : {}) } } },
         provideNoopAnimations(),
+        provideHttpClient(),
+        ConfirmationService,
         MessageService,
       ],
     }).compileComponents();
@@ -47,6 +53,27 @@ describe('AppUserForm', () => {
     fixture.detectChanges();
     return fixture;
   }
+
+  afterEach(() => sessionStorage.clear());
+
+  const resetButton = (fixture: ComponentFixture<AppUserForm>) =>
+    (fixture.nativeElement as HTMLElement).querySelector('#form-toolbar #reset-password-button');
+
+  it('shows 重設為預設密碼 in the edit toolbar for Admin users', async () => {
+    const button = resetButton(await setup('helen', ['User', 'Admin']));
+
+    expect(button).not.toBeNull();
+    expect(button!.textContent).toContain('重設為預設密碼');
+    expect(button!.querySelector('button')!.getAttribute('type')).toBe('button'); // never submits the form
+  });
+
+  it('hides 重設為預設密碼 from users without the Admin role', async () => {
+    expect(resetButton(await setup('helen', ['User']))).toBeNull();
+  });
+
+  it('has no 重設為預設密碼 when adding a user', async () => {
+    expect(resetButton(await setup(null, ['Admin']))).toBeNull();
+  });
 
   it('pins the Save/Cancel toolbar to the top of the page when adding', async () => {
     expectStickyToolbar((await setup(null)).nativeElement);

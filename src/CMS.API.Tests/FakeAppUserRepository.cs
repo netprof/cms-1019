@@ -3,7 +3,8 @@ using CMS.API.Repositories;
 
 namespace CMS.API.Tests;
 
-public class FakeAppUserRepository : IAppUserRepository
+/// <summary>Pass <c>defaultPassword</c> to stand in for a different SysConfig <c>appConfig.defaultPassword</c>.</summary>
+public class FakeAppUserRepository(string defaultPassword = FakeAppUserRepository.DefaultPassword) : IAppUserRepository
 {
     public const string DefaultPassword = "Secret#1";
 
@@ -121,18 +122,9 @@ public class FakeAppUserRepository : IAppUserRepository
         return Task.FromResult<AppUser?>(Clone(row.User, true));
     }
 
-    public Task<AppUser?> ResetPasswordAsync(string userId, string passwordHash)
-    {
-        var row = Find(userId);
-        if (row is null) return Task.FromResult<AppUser?>(null);
-        row.PasswordHash = passwordHash;
-        row.User.PasswordUpdatedTime = DateTime.UtcNow;
-        return Task.FromResult<AppUser?>(Clone(row.User, true));
-    }
-
     public Task<bool> DeleteAsync(string userId) => Task.FromResult(_rows.RemoveAll(r => r.User.UserId == userId) > 0);
 
-    public Task<string> GetDefaultPasswordAsync() => Task.FromResult(DefaultPassword);
+    public Task<string> GetDefaultPasswordAsync() => Task.FromResult(defaultPassword);
 
     public Task<IEnumerable<AppRoleLookup>> GetRoleLookupsAsync() => Task.FromResult(_roles.AsEnumerable());
 }

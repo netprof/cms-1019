@@ -49,15 +49,6 @@ public class AppUsersController(IAppUserRepository repository) : ControllerBase
         return updated is null ? NotFound() : Ok(updated);
     }
 
-    /// <summary>Resets the password to the system default (SysConfig appConfig.defaultPassword).</summary>
-    [HttpPost("{id}/reset-password")]
-    public async Task<ActionResult<AppUser>> ResetPassword(string id)
-    {
-        var hash = await DefaultPasswordHashAsync();
-        var updated = await repository.ResetPasswordAsync(id, hash);
-        return updated is null ? NotFound() : Ok(updated);
-    }
-
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(string id)
     {

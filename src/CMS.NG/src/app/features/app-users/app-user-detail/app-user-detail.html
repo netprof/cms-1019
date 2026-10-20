@@ -1,20 +1,11 @@
 <p-toast />
-<p-confirmdialog />
 
 <div class="page-header">
   <h1>檢視使用者</h1>
   <div class="actions">
     <p-button id="back-button" label="返回" icon="pi pi-arrow-left" severity="secondary" (onClick)="back()" />
     @if (user()) {
-      <p-button
-        id="reset-password-button"
-        label="重設密碼"
-        icon="pi pi-key"
-        severity="warn"
-        [outlined]="true"
-        [loading]="resetting()"
-        (onClick)="resetPassword()"
-      />
+      <app-reset-password-button [userId]="user()!.userId" (reset)="reloadUser()" />
       <p-button id="edit-button" label="編輯" icon="pi pi-pencil" (onClick)="edit()" />
     }
   </div>

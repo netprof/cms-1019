@@ -26,6 +26,24 @@ public class AuthRepository(IDbConnectionFactory connectionFactory) : IAuthRepos
         return roleIds.ToList();
     }
 
+    public async Task<bool> UpdateUserNameAsync(string userId, string userName)
+    {
+        using var conn = await connectionFactory.CreateOpenConnectionAsync();
+        return await conn.ExecuteAsync(
+            "UPDATE AppUser SET UserName = @userName WHERE UserId = @userId", new { userId, userName }) > 0;
+    }
+
+    public async Task<bool> UpdatePasswordAsync(string userId, string passwordHash, DateTime updatedTime)
+    {
+        using var conn = await connectionFactory.CreateOpenConnectionAsync();
+        return await conn.ExecuteAsync(
+            """
+            UPDATE AppUser
+            SET PasswordHash = @passwordHash, PasswordUpdatedTime = @updatedTime
+            WHERE UserId = @userId
+            """, new { userId, passwordHash, updatedTime }) > 0;
+    }
+
     public async Task<string> GetJwtSigningKeyAsync()
     {
         using var conn = await connectionFactory.CreateOpenConnectionAsync();

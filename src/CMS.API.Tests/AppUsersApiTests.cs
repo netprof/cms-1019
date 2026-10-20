@@ -201,29 +201,14 @@ public class AppUsersApiTests : IClassFixture<ApiTestFactory>
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    // ---- reset password ----
+    // ---- reset password: moved to POST /api/auth/reset-password (Admin only, ResetPasswordApiTests) ----
 
     [Fact]
-    public async Task ResetPassword_Existing_StoresDefaultHashAndStampsTime()
+    public async Task OldResetPasswordRoute_IsGone()
     {
-        var client = _factory.CreateAuthenticatedClient();
-        var before = DateTime.UtcNow.AddSeconds(-1);
+        var response = await _factory.CreateAuthenticatedClient().PostAsync("/api/appusers/helen/reset-password", null);
 
-        var response = await client.PostAsync("/api/appusers/helen/reset-password", null);
-
-        response.EnsureSuccessStatusCode();
-        var user = await response.Content.ReadFromJsonAsync<AppUser>();
-        Assert.Equal("helen", user!.UserId);
-        Assert.True(user.PasswordUpdatedTime >= before);
-        Assert.Equal(DefaultHash, _repository.StoredHash("helen"));
-    }
-
-    [Fact]
-    public async Task ResetPassword_Missing_Returns404()
-    {
-        var response = await _factory.CreateAuthenticatedClient().PostAsync("/api/appusers/nope/reset-password", null);
-
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.True(response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed, response.StatusCode.ToString());
     }
 
     // ---- delete ----

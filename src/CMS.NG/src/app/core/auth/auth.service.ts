@@ -13,6 +13,15 @@ export interface AuthProfile {
 
 export const AUTH_STORAGE_KEY = 'cms-auth';
 export const LOGIN_URL = `${environment.apiBaseUrl}/auth/login`;
+export const PROFILE_URL = `${environment.apiBaseUrl}/auth/profile`;
+export const CHANGE_PASSWORD_URL = `${environment.apiBaseUrl}/auth/change-password`;
+
+/** Plain passwords for `POST /api/auth/change-password`; hashes never leave the server. */
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -38,6 +47,27 @@ export class AuthService {
         this.profile.set(profile);
       }),
     );
+  }
+
+  /**
+   * Renames the signed-in user (the API takes the UserId from the token) and refreshes the
+   * stored profile, so the shell shows the new name at once. The token itself is unchanged.
+   */
+  updateProfile(userName: string): Observable<Pick<AuthProfile, 'userId' | 'userName'>> {
+    return this.http.put<Pick<AuthProfile, 'userId' | 'userName'>>(PROFILE_URL, { userName }).pipe(
+      tap(({ userName: saved }) => {
+        const current = this.profile();
+        if (!current) return;
+        const next = { ...current, userName: saved };
+        sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(next));
+        this.profile.set(next);
+      }),
+    );
+  }
+
+  /** Changes the signed-in user's password (UserId from the token). 204 on success, 400 with field errors otherwise. */
+  changePassword(request: ChangePasswordRequest): Observable<void> {
+    return this.http.post<void>(CHANGE_PASSWORD_URL, request);
   }
 
   /** Clears all session storage (token and saved list filters) and goes to the login page. */
