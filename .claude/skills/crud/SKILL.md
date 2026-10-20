@@ -90,7 +90,7 @@ spec generation. Reading it now."
 
 Read `spec/{SUB_SYSTEM}/{TABLE}.md` (just generated or pre-existing).
 Read `spec/code-gen.convention.md` for scaffolding conventions.
-Follow CLAUDE.md for all non-obvious rules (string PKs, DateOnly handlers,
+Follow CLAUDE.md plus `docs/patterns.md` for all non-obvious rules (string PKs, DateOnly handlers,
 RowAudit logging, sticky toolbar pattern, session storage keys, etc.).
 
 Build in this order:
@@ -155,5 +155,6 @@ Build in this order:
 After all files are written, report:
 - List of every file created or modified
 - Any non-obvious decisions made (e.g. inferred display name, chosen sort order)
+- Append the feature to `docs/features.md` (behaviour, key quirks, delete/FK rules, lookup route, spec path, menu entry)
 - Next step: `dotnet run` to verify the API compiles; `ng serve` to verify the UI
 - Run the tests: `dotnet test` (backend) and `ng test --watch=false` (frontend)
