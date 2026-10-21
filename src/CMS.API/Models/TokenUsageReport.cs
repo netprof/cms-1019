@@ -61,3 +61,41 @@ public class TokenUsageSessionRow : TokenUsageReportTotals
     /// <summary>Distinct models, sorted, joined with ", ".</summary>
     public string Models { get; set; } = "";
 }
+
+/// <summary>The report crossed by two dimensions: every measure per cell, plus row, column and grand totals.</summary>
+public class TokenUsagePivot
+{
+    /// <summary>Ordered by key; the client re-sorts by the chosen measure.</summary>
+    public List<TokenUsagePivotRow> Rows { get; set; } = [];
+
+    /// <summary>Ordered by key (dates ascending); empty when there is no column dimension.</summary>
+    public List<TokenUsagePivotColumn> Columns { get; set; } = [];
+
+    public TokenUsageReportTotals Total { get; set; } = new();
+}
+
+/// <summary>One value of a pivot axis.</summary>
+public class TokenUsagePivotHeader
+{
+    /// <summary>Identifies the value: UserId, project, model or the date label.</summary>
+    public string Key { get; set; } = "";
+
+    /// <summary>Shown text: the user's name for a user, else the key.</summary>
+    public string Label { get; set; } = "";
+
+    /// <summary>Tooltip: the UserId for a user, a week's Monday ~ Sunday; otherwise null.</summary>
+    public string? Title { get; set; }
+}
+
+public class TokenUsagePivotColumn : TokenUsagePivotHeader
+{
+    public TokenUsageReportTotals Total { get; set; } = new();
+}
+
+public class TokenUsagePivotRow : TokenUsagePivotHeader
+{
+    /// <summary>Cells by column key; a column without data has no entry.</summary>
+    public Dictionary<string, TokenUsageReportTotals> Cells { get; set; } = [];
+
+    public TokenUsageReportTotals Total { get; set; } = new();
+}

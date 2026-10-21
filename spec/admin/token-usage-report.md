@@ -146,6 +146,36 @@ Every Claude Code session reports its own token consumption to the CMS API autom
   - After the first unreachable attempt it spools the rest without sending.
 - **Project for an old transcript.** If the cwd no longer exists (for example, a removed worktree), git is asked from the nearest existing parent folder.
 
+## Extension: pivot (2026-10-21)
+
+GitHub issue: [#10](https://github.com/netprof/cms-1019/issues/10)
+
+### User stories
+
+34. As an admin, I want to pick a row dimension, an optional column dimension and a measure, so that I can cross any two of user, project, model and date (for example cost per user per month).
+35. As an admin, I want dates grouped by day, ISO week or month, so that long ranges stay readable.
+36. As an admin, I want row, column and grand totals, so that I can read shares at a glance.
+37. As an admin, I want to switch the measure and re-sort without waiting for the server, so that I can compare cost and tokens quickly.
+
+### Decisions
+
+- **Place.** A third mode 樞紐 on `/token-usages`, sharing the filter bar (date range, user, project, model). No session dimension: the session mode covers sessions.
+- **Built in-house**, not a third-party pivot grid: one dimension per axis, a PrimeNG table, no new dependency.
+- **API.** `POST /api/tokenusages/report/pivot` takes the filters plus `rowDim`, `colDim` (nullable) and `dateGrain`.
+  - It re-groups the summary report's repository rows in C#, so there is no new SQL. Grain and ISO week (Monday start, on Taipei `UsageDate`) are computed in C#.
+  - Every cell carries every measure, plus row, column and grand totals. Cost keeps the report rule (NULL-ignoring sum; NULL only when nothing is priced).
+  - 400: a dimension outside `user|project|model|date`; the same dimension on both axes; a grain outside `day|week|month` when an axis is date; `from > to`.
+- **Labels.** User: name, with the UserId as tooltip. Day `2026-10-21`, week `2026-W43` (tooltip Monday ~ Sunday), month `2026-10`. A week or month partly outside the range counts only its in-range rows, unmarked.
+- **UI.**
+  - 列 / 欄 / 顆粒度 / 量值 selects under the filter bar; 顆粒度 only while an axis is date; changes apply at once. Row and column options exclude each other; 欄 can be 無.
+  - Default: user × month, cost.
+  - Measure and sort stay on the client; dimensions, grain and filters re-query.
+  - Rows by total desc (by date asc when the rows are dates); columns by date asc, otherwise by total desc. A header click sorts the rows by that column.
+  - No paging and no column cap: the row header is frozen and the table scrolls sideways.
+  - Empty cells and NULL cost are blank; numbers formatted like the other modes.
+  - State: `tokenusage-pivot-filters` and `tokenusage-pivot-config`; the date range follows the report's saving rule.
+- **Access** unchanged. **Out of scope:** session dimension, export, heat-map shading, more than one dimension per axis.
+
 ## Further Notes
 
 - Re-sending is idempotent by design: the session is the unit of replacement, so spool retries and `--resume` re-reports are both safe.

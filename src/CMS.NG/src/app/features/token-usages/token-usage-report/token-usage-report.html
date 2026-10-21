@@ -3,7 +3,7 @@
 <div class="page-header">
   <h1>
     用量報表 TokenUsage
-    <small>Claude Code token 用量（{{ mode === 'session' ? '依 Session 彙總' : '依使用者、日期、專案、模型彙總' }}）</small>
+    <small>Claude Code token 用量（{{ subtitles[mode] }}）</small>
   </h1>
   <p-selectbutton
     id="mode-toggle"
@@ -128,6 +128,8 @@
         </tr>
       </ng-template>
     </p-table>
+  } @else if (mode === 'pivot') {
+    <app-token-usage-pivot [filters]="filters" />
   } @else {
     <p-table
       id="session-table"

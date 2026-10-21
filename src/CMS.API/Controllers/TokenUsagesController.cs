@@ -1,3 +1,4 @@
+using System.Globalization;
 using CMS.API.Data;
 using CMS.API.Models;
 using CMS.API.Repositories;
@@ -74,6 +75,103 @@ public class TokenUsagesController(
             .ThenBy(r => r.SessionId, SqlCollation.Comparer)));
     }
 
+    /// <summary>The summary report's rows crossed by two dimensions (or one, without columns), with totals.</summary>
+    [HttpPost("report/pivot")]
+    public async Task<ActionResult<TokenUsagePivot>> Pivot(TokenUsagePivotQuery query)
+    {
+        if (query.From > query.To)
+            ModelState.AddModelError(nameof(query.To), "To must not be earlier than From.");
+        if (!PivotDimensions.Contains(query.RowDim ?? ""))
+            ModelState.AddModelError(nameof(query.RowDim), $"Cannot pivot by '{query.RowDim}'.");
+        if (query.ColDim is not null && !PivotDimensions.Contains(query.ColDim))
+            ModelState.AddModelError(nameof(query.ColDim), $"Cannot pivot by '{query.ColDim}'.");
+        if (string.Equals(query.RowDim, query.ColDim, StringComparison.OrdinalIgnoreCase))
+            ModelState.AddModelError(nameof(query.ColDim), "Rows and columns must use different dimensions.");
+        var usesDate = IsDate(query.RowDim) || IsDate(query.ColDim);
+        if (usesDate && !DateGrains.Contains(query.DateGrain ?? ""))
+            ModelState.AddModelError(nameof(query.DateGrain), $"Unknown date grain '{query.DateGrain}'.");
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+        var rows = await repository.GetReportRowsAsync(query);
+        var rowHeader = PivotHeader(query.RowDim!, query.DateGrain);
+        var colHeader = query.ColDim is null ? null : PivotHeader(query.ColDim, query.DateGrain);
+
+        return Ok(new TokenUsagePivot
+        {
+            Rows = rows
+                .GroupBy(r => rowHeader(r).Key, SqlCollation.Comparer)
+                .OrderBy(g => g.Key, SqlCollation.Comparer)
+                .Select(g => WithHeader(new TokenUsagePivotRow
+                {
+                    Total = Sum(g),
+                    Cells = colHeader is null
+                        ? []
+                        : g.GroupBy(r => colHeader(r).Key, SqlCollation.Comparer)
+                            .ToDictionary(c => c.Key, Sum, SqlCollation.Comparer),
+                }, rowHeader(g.First())))
+                .ToList(),
+            Columns = colHeader is null
+                ? []
+                : rows
+                    .GroupBy(r => colHeader(r).Key, SqlCollation.Comparer)
+                    .OrderBy(g => g.Key, SqlCollation.Comparer)
+                    .Select(g => WithHeader(new TokenUsagePivotColumn { Total = Sum(g) }, colHeader(g.First())))
+                    .ToList(),
+            Total = Sum(rows),
+        });
+    }
+
+    private static readonly HashSet<string> PivotDimensions = new(["user", "project", "model", "date"], StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> DateGrains = new(["day", "week", "month"], StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsDate(string? dimension) => string.Equals(dimension, "date", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Maps a summary row to its value on one pivot axis; <paramref name="dimension"/> is already validated.</summary>
+    private static Func<TokenUsageReportRow, TokenUsagePivotHeader> PivotHeader(string dimension, string? grain) =>
+        dimension.ToLowerInvariant() switch
+        {
+            "user" => r => new() { Key = r.UserId, Label = r.UserName, Title = r.UserId },
+            "project" => r => new() { Key = r.Project, Label = r.Project },
+            "model" => r => new() { Key = r.Model, Label = r.Model },
+            _ => grain!.ToLowerInvariant() switch
+            {
+                "day" => r => new() { Key = $"{r.UsageDate:yyyy-MM-dd}", Label = $"{r.UsageDate:yyyy-MM-dd}" },
+                "month" => r => new() { Key = $"{r.UsageDate:yyyy-MM}", Label = $"{r.UsageDate:yyyy-MM}" },
+                _ => r => IsoWeek(r.UsageDate),
+            },
+        };
+
+    /// <summary>ISO 8601 week (Monday start; week 1 holds the year's first Thursday), e.g. 2026-W53.</summary>
+    private static TokenUsagePivotHeader IsoWeek(DateOnly date)
+    {
+        var day = date.ToDateTime(TimeOnly.MinValue);
+        var (year, week) = (ISOWeek.GetYear(day), ISOWeek.GetWeekOfYear(day));
+        var monday = DateOnly.FromDateTime(ISOWeek.ToDateTime(year, week, DayOfWeek.Monday));
+        var label = $"{year}-W{week:00}";
+        return new() { Key = label, Label = label, Title = $"{monday:yyyy-MM-dd} ~ {monday.AddDays(6):yyyy-MM-dd}" };
+    }
+
+    private static T WithHeader<T>(T target, TokenUsagePivotHeader header) where T : TokenUsagePivotHeader
+    {
+        (target.Key, target.Label, target.Title) = (header.Key, header.Label, header.Title);
+        return target;
+    }
+
+    /// <summary>Token sums of <paramref name="rows"/>; cost ignores unpriced rows and is null when none is priced (like SQL SUM).</summary>
+    private static TokenUsageReportTotals Sum(IEnumerable<TokenUsageReportTotals> rows)
+    {
+        var list = rows as IReadOnlyCollection<TokenUsageReportTotals> ?? rows.ToList();
+        return new TokenUsageReportTotals
+        {
+            InputTokens = list.Sum(r => r.InputTokens),
+            CacheWrite5mTokens = list.Sum(r => r.CacheWrite5mTokens),
+            CacheWrite1hTokens = list.Sum(r => r.CacheWrite1hTokens),
+            CacheReadTokens = list.Sum(r => r.CacheReadTokens),
+            OutputTokens = list.Sum(r => r.OutputTokens),
+            Cost = list.Any(r => r.Cost.HasValue) ? list.Sum(r => r.Cost) : null,
+        };
+    }
+
     private bool ValidateReportQuery<TRow>(
         TokenUsageReportQuery query, Dictionary<string, ReportSort<TRow>> sorts, out ReportSort<TRow> sort)
     {
@@ -101,15 +199,7 @@ public class TokenUsagesController(
         {
             Items = page,
             TotalRecords = rows.Count,
-            Totals = new TokenUsageReportTotals
-            {
-                InputTokens = rows.Sum(r => r.InputTokens),
-                CacheWrite5mTokens = rows.Sum(r => r.CacheWrite5mTokens),
-                CacheWrite1hTokens = rows.Sum(r => r.CacheWrite1hTokens),
-                CacheReadTokens = rows.Sum(r => r.CacheReadTokens),
-                OutputTokens = rows.Sum(r => r.OutputTokens),
-                Cost = rows.Any(r => r.Cost.HasValue) ? rows.Sum(r => r.Cost) : null,
-            },
+            Totals = Sum(rows),
         };
     }
 

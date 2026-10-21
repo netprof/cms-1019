@@ -48,3 +48,16 @@ public class TokenUsageSessionReportQuery : TokenUsageReportQuery
 {
     public TokenUsageSessionReportQuery() => SortField = "lastDate";
 }
+
+/// <summary>Pivot request: the report filters plus the two axes (dimensions are user, project, model, date).</summary>
+public class TokenUsagePivotQuery : TokenUsageReportFilter
+{
+    /// <summary>Dimension of the rows.</summary>
+    public string RowDim { get; set; } = "user";
+
+    /// <summary>Dimension of the columns; null = no columns (each row has only its total).</summary>
+    public string? ColDim { get; set; } = "date";
+
+    /// <summary>day, week (ISO, Monday start) or month; required only when an axis is date.</summary>
+    public string? DateGrain { get; set; } = "month";
+}
