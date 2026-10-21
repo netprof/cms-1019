@@ -1,0 +1,62 @@
+<div class="pivot-config">
+  <div class="field">
+    <label for="p-row">列</label>
+    <p-select inputId="p-row" [options]="rowOptions()" optionLabel="label" optionValue="value" [ngModel]="rowDim()" (ngModelChange)="setRowDim($event)" appendTo="body" />
+  </div>
+  <div class="field">
+    <label for="p-col">欄</label>
+    <p-select inputId="p-col" [options]="colOptions()" optionLabel="label" optionValue="value" [ngModel]="colDim()" (ngModelChange)="setColDim($event)" appendTo="body" />
+  </div>
+  @if (usesDate()) {
+    <div class="field" id="p-grain">
+      <label for="p-grain-select">顆粒度</label>
+      <p-select inputId="p-grain-select" [options]="grainOptions" optionLabel="label" optionValue="value" [ngModel]="dateGrain()" (ngModelChange)="setDateGrain($event)" appendTo="body" />
+    </div>
+  }
+  <div class="field">
+    <label for="p-measure">量值</label>
+    <p-select inputId="p-measure" [options]="measureOptions" optionLabel="label" optionValue="value" [ngModel]="measure()" (ngModelChange)="setMeasure($event)" appendTo="body" />
+  </div>
+</div>
+
+<ng-template #cell let-totals>
+  @let v = value(totals);
+  {{ v == null ? '' : measure() === 'cost' ? (v | number: '1.2-6') : (v | number) }}
+</ng-template>
+
+<p-table id="pivot-table" [value]="rows()" [loading]="loading()" [scrollable]="true">
+  <ng-template #header>
+    <tr>
+      <th pFrozenColumn class="sortable" (click)="sortBy(LABEL)">{{ rowDimLabel() }} <i [class]="sortIcon(LABEL)"></i></th>
+      @for (c of columns(); track c.key) {
+        <th class="num sortable" [title]="c.title ?? ''" (click)="sortBy(c.key)">{{ c.label }} <i [class]="sortIcon(c.key)"></i></th>
+      }
+      <th pFrozenColumn alignFrozen="right" class="num sortable total-col" (click)="sortBy(TOTAL)">合計 <i [class]="sortIcon(TOTAL)"></i></th>
+    </tr>
+  </ng-template>
+  <ng-template #body let-r>
+    <tr>
+      <td pFrozenColumn class="nowrap" [title]="r.title ?? ''">{{ r.label }}</td>
+      @for (c of columns(); track c.key) {
+        <td class="num"><ng-container *ngTemplateOutlet="cell; context: { $implicit: r.cells[c.key] }" /></td>
+      }
+      <td pFrozenColumn alignFrozen="right" class="num total-col"><ng-container *ngTemplateOutlet="cell; context: { $implicit: r.total }" /></td>
+    </tr>
+  </ng-template>
+  <ng-template #footer>
+    @if (rows().length) {
+      <tr class="totals-row">
+        <td pFrozenColumn>合計</td>
+        @for (c of columns(); track c.key) {
+          <td class="num"><ng-container *ngTemplateOutlet="cell; context: { $implicit: c.total }" /></td>
+        }
+        <td pFrozenColumn alignFrozen="right" class="num"><ng-container *ngTemplateOutlet="cell; context: { $implicit: pivot()?.total }" /></td>
+      </tr>
+    }
+  </ng-template>
+  <ng-template #emptymessage>
+    <tr>
+      <td [attr.colspan]="columns().length + 2" style="text-align: center">沒有符合的資料</td>
+    </tr>
+  </ng-template>
+</p-table>

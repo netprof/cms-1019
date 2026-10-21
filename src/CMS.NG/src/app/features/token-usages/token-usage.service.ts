@@ -4,6 +4,8 @@ import { Observable } from 'rxjs';
 import { environment } from '@env/environment';
 import {
   AppUserLookup,
+  TokenUsagePivot,
+  TokenUsagePivotQuery,
   TokenUsageReport,
   TokenUsageReportQuery,
   TokenUsageSessionReport,
@@ -21,6 +23,10 @@ export class TokenUsageService {
 
   sessionReport(query: TokenUsageReportQuery): Observable<TokenUsageSessionReport> {
     return this.http.post<TokenUsageSessionReport>(`${this.url}/report/sessions`, query);
+  }
+
+  pivot(query: TokenUsagePivotQuery): Observable<TokenUsagePivot> {
+    return this.http.post<TokenUsagePivot>(`${this.url}/report/pivot`, query);
   }
 
   getUserLookups(): Observable<AppUserLookup[]> {

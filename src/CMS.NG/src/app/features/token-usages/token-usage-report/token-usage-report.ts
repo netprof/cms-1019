@@ -11,6 +11,7 @@ import { SelectButtonModule } from 'primeng/selectbutton';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { parseIso, taipeiToday, toIso } from '../../../core/utils/date.util';
+import { loadSession, saveSession } from '../../../core/utils/session-storage.util';
 import {
   AppUserLookup,
   TokenUsageReport as Report,
@@ -21,16 +22,28 @@ import {
   TokenUsageTotals,
 } from '../token-usage.model';
 import { TokenUsageService } from '../token-usage.service';
+import { TokenUsagePivot } from '../token-usage-pivot/token-usage-pivot';
 
-/** `summary`: by (user, date, project, model); `session`: one row per session. */
-export type ReportMode = 'summary' | 'session';
+/** `summary`: by (user, date, project, model); `session`: one row per session; `pivot`: two dimensions crossed. */
+export type ReportMode = 'summary' | 'session' | 'pivot';
+
+/** The modes shown as a server-paged table; the pivot keeps its own config and sort. */
+type TableMode = Exclude<ReportMode, 'pivot'>;
+
+const MODES: ReportMode[] = ['summary', 'session', 'pivot'];
 
 const MODE_KEY = 'tokenusage-report-mode';
 
-/** Each mode remembers its own filters, sort and page. */
-const KEYS: Record<ReportMode, { filters: string; sort: string; page: string }> = {
-  summary: { filters: 'tokenusage-report-filters', sort: 'tokenusage-report-sort', page: 'tokenusage-report-page' },
-  session: { filters: 'tokenusage-sessions-filters', sort: 'tokenusage-sessions-sort', page: 'tokenusage-sessions-page' },
+/** Each mode remembers its own filters; the table modes also their sort and page. */
+const FILTERS_KEYS: Record<ReportMode, string> = {
+  summary: 'tokenusage-report-filters',
+  session: 'tokenusage-sessions-filters',
+  pivot: 'tokenusage-pivot-filters',
+};
+
+const TABLE_KEYS: Record<TableMode, { sort: string; page: string }> = {
+  summary: { sort: 'tokenusage-report-sort', page: 'tokenusage-report-page' },
+  session: { sort: 'tokenusage-sessions-sort', page: 'tokenusage-sessions-page' },
 };
 
 interface SortState {
@@ -43,7 +56,7 @@ interface PageState {
   rows: number;
 }
 
-const DEFAULT_SORT: Record<ReportMode, SortState> = {
+const DEFAULT_SORT: Record<TableMode, SortState> = {
   summary: { field: 'usageDate', order: -1 },
   session: { field: 'lastDate', order: -1 },
 };
@@ -62,23 +75,6 @@ export interface LazyLoad {
 interface DateFilters {
   from: Date | null;
   to: Date | null;
-}
-
-function load<T>(key: string, fallback: T): T {
-  try {
-    const raw = sessionStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function save(key: string, value: unknown) {
-  try {
-    sessionStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // storage unavailable; state simply isn't remembered
-  }
 }
 
 /**
@@ -102,13 +98,26 @@ function defaultFilters(mode: ReportMode): TokenUsageReportFilters {
  * default, so an untouched "this month to date" keeps following today after midnight.
  */
 function loadFilters(mode: ReportMode): TokenUsageReportFilters {
-  return { ...defaultFilters(mode), ...load<Partial<TokenUsageReportFilters>>(KEYS[mode].filters, {}) };
+  return { ...defaultFilters(mode), ...loadSession<Partial<TokenUsageReportFilters>>(FILTERS_KEYS[mode], {}) };
 }
 
 function saveFilters(mode: ReportMode, filters: TokenUsageReportFilters) {
   const defaults = defaultFilters(mode);
   const { from, to, ...rest } = filters;
-  save(KEYS[mode].filters, from === defaults.from && to === defaults.to ? rest : filters);
+  saveSession(FILTERS_KEYS[mode], from === defaults.from && to === defaults.to ? rest : filters);
+}
+
+function loadMode(): ReportMode {
+  const mode = loadSession<ReportMode>(MODE_KEY, 'summary');
+  return MODES.includes(mode) ? mode : 'summary';
+}
+
+function loadSort(mode: TableMode): SortState {
+  return loadSession<SortState>(TABLE_KEYS[mode].sort, DEFAULT_SORT[mode]);
+}
+
+function loadPage(mode: TableMode): PageState {
+  return loadSession<PageState>(TABLE_KEYS[mode].page, DEFAULT_PAGE);
 }
 
 const emptyTotals: TokenUsageTotals = {
@@ -137,6 +146,7 @@ const emptyTotals: TokenUsageTotals = {
     SelectButtonModule,
     TableModule,
     ToastModule,
+    TokenUsagePivot,
   ],
   templateUrl: './token-usage-report.html',
   styles: `
@@ -197,7 +207,14 @@ export class TokenUsageReport implements OnInit {
   readonly modeOptions: { label: string; value: ReportMode }[] = [
     { label: '彙總', value: 'summary' },
     { label: '依 Session', value: 'session' },
+    { label: '樞紐', value: 'pivot' },
   ];
+
+  readonly subtitles: Record<ReportMode, string> = {
+    summary: '依使用者、日期、專案、模型彙總',
+    session: '依 Session 彙總',
+    pivot: '樞紐分析',
+  };
 
   readonly rows = signal<TokenUsageReportRow[]>([]);
   readonly sessionRows = signal<TokenUsageSessionRow[]>([]);
@@ -206,11 +223,12 @@ export class TokenUsageReport implements OnInit {
   readonly loading = signal(false);
   readonly users = signal<AppUserLookup[]>([]);
 
-  mode: ReportMode = load<ReportMode>(MODE_KEY, 'summary') === 'session' ? 'session' : 'summary';
+  mode: ReportMode = loadMode();
   filters: TokenUsageReportFilters = loadFilters(this.mode);
   dates: DateFilters = { from: null, to: null };
-  sort: SortState = load<SortState>(KEYS[this.mode].sort, DEFAULT_SORT[this.mode]);
-  page: PageState = load<PageState>(KEYS[this.mode].page, DEFAULT_PAGE);
+  /** Of the table mode shown; untouched while the pivot is shown. */
+  sort: SortState = this.mode === 'pivot' ? DEFAULT_SORT.summary : loadSort(this.mode);
+  page: PageState = this.mode === 'pivot' ? DEFAULT_PAGE : loadPage(this.mode);
 
   ngOnInit() {
     this.syncDatesFromFilters();
@@ -232,17 +250,19 @@ export class TokenUsageReport implements OnInit {
   }
 
   /**
-   * Switches to the other report with its own remembered state. The template swaps tables,
-   * and the new table's initial onLazyLoad fetches.
+   * Switches to another report with its own remembered state. The template swaps views; a table's
+   * initial onLazyLoad fetches, and the pivot fetches when it gets its filters.
    */
   setMode(mode: ReportMode) {
     if (!mode) return; // p-selectbutton emits null when the selected option is clicked again
     this.mode = mode;
-    save(MODE_KEY, mode);
+    saveSession(MODE_KEY, mode);
     this.filters = loadFilters(mode);
     this.syncDatesFromFilters();
-    this.sort = load<SortState>(KEYS[mode].sort, DEFAULT_SORT[mode]);
-    this.page = load<PageState>(KEYS[mode].page, DEFAULT_PAGE);
+    if (mode !== 'pivot') {
+      this.sort = loadSort(mode);
+      this.page = loadPage(mode);
+    }
     this.rows.set([]);
     this.sessionRows.set([]);
     this.totalRecords.set(0);
@@ -280,11 +300,14 @@ export class TokenUsageReport implements OnInit {
 
   /** Table sort/page change (and the table's initial load). */
   onLazyLoad(event: LazyLoad) {
+    const mode = this.mode;
+    if (mode === 'pivot') return; // only the table modes render a lazy table
     const field = Array.isArray(event.sortField) ? event.sortField[0] : event.sortField;
     this.sort = { field: field || this.sort.field, order: event.sortOrder || this.sort.order };
     this.page = { first: event.first ?? 0, rows: event.rows || this.page.rows };
-    save(KEYS[this.mode].sort, this.sort);
-    save(KEYS[this.mode].page, this.page);
+    const keys = TABLE_KEYS[mode];
+    saveSession(keys.sort, this.sort);
+    saveSession(keys.page, this.page);
     this.fetch();
   }
 
@@ -299,8 +322,9 @@ export class TokenUsageReport implements OnInit {
       ...(this.mode === 'session' ? { sessionName: text(this.filters.sessionName) } : {}),
     };
     saveFilters(this.mode, this.filters);
+    if (this.mode === 'pivot') return; // the pivot re-queries on its new filters input
     this.page = { ...this.page, first: 0 };
-    save(KEYS[this.mode].page, this.page);
+    saveSession(TABLE_KEYS[this.mode].page, this.page);
     this.fetch();
   }
 

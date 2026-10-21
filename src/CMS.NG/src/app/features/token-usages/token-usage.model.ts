@@ -71,3 +71,43 @@ export interface AppUserLookup {
   userId: string;
   userName: string;
 }
+
+export type PivotDimension = 'user' | 'project' | 'model' | 'date';
+
+/** `week` is the ISO week (Monday start, Taipei dates). */
+export type DateGrain = 'day' | 'week' | 'month';
+
+export interface TokenUsagePivotQuery extends TokenUsageReportFilters {
+  rowDim: PivotDimension;
+  /** null: no columns, each row has only its total. */
+  colDim: PivotDimension | null;
+  /** Used only when an axis is `date`. */
+  dateGrain: DateGrain;
+}
+
+/** One value of a pivot axis. */
+export interface TokenUsagePivotHeader {
+  /** UserId, project, model or the date label (`2026-10-21`, `2026-W43`, `2026-10`). */
+  key: string;
+  /** The user's name for a user, else the key. */
+  label: string;
+  /** Tooltip: the UserId for a user, a week's `Monday ~ Sunday`; otherwise null. */
+  title: string | null;
+}
+
+export interface TokenUsagePivotColumn extends TokenUsagePivotHeader {
+  total: TokenUsageTotals;
+}
+
+export interface TokenUsagePivotRow extends TokenUsagePivotHeader {
+  /** By column key; a column without data has no entry. */
+  cells: Record<string, TokenUsageTotals>;
+  total: TokenUsageTotals;
+}
+
+/** Ordered by key (dates ascending); the page re-sorts by the chosen measure. */
+export interface TokenUsagePivot {
+  rows: TokenUsagePivotRow[];
+  columns: TokenUsagePivotColumn[];
+  total: TokenUsageTotals;
+}

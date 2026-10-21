@@ -57,9 +57,10 @@ describe('TokenUsageReport', () => {
   const el = () => fixture.nativeElement as HTMLElement;
 
   async function setup(result = of(report)) {
-    service = jasmine.createSpyObj<TokenUsageService>('TokenUsageService', ['report', 'sessionReport', 'getUserLookups']);
+    service = jasmine.createSpyObj<TokenUsageService>('TokenUsageService', ['report', 'sessionReport', 'pivot', 'getUserLookups']);
     service.report.and.returnValue(result);
     service.sessionReport.and.returnValue(of(sessionReport));
+    service.pivot.and.returnValue(of({ rows: [], columns: [], total: report.totals }));
     service.getUserLookups.and.returnValue(of([{ userId: 'helen', userName: 'Helen Wu' }]));
 
     await TestBed.configureTestingModule({
@@ -170,17 +171,57 @@ describe('TokenUsageReport', () => {
     });
   });
 
-  describe('by session', () => {
-    /** Clicks the mode toggle's option with this label, then lets the swapped-in table load. */
-    async function switchTo(label: string) {
-      const option = Array.from(el().querySelectorAll<HTMLElement>('#mode-toggle .p-togglebutton'))
-        .find((b) => b.textContent!.trim() === label)!;
-      option.click();
+  /** Clicks the mode toggle's option with this label, then lets the swapped-in view load. */
+  async function switchTo(label: string) {
+    const option = Array.from(el().querySelectorAll<HTMLElement>('#mode-toggle .p-togglebutton'))
+      .find((b) => b.textContent!.trim() === label)!;
+    option.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  describe('pivot', () => {
+    beforeEach(async () => {
+      await setup();
+      await switchTo('樞紐');
+    });
+
+    it('shows the pivot with this month to date, and no table', () => {
+      expect(el().querySelector('app-token-usage-pivot')).not.toBeNull();
+      expect(el().querySelector('#summary-table')).toBeNull();
+      expect(el().querySelector('#f-sessionName')).toBeNull();
+      expect(service.pivot).toHaveBeenCalledOnceWith(jasmine.objectContaining({
+        from: '2026-10-01', to: '2026-10-20', userId: null, project: null, model: null,
+      }));
+      expect(sessionStorage.getItem('tokenusage-report-mode')).toBe('"pivot"');
+    });
+
+    it('搜尋 re-queries the pivot with its own remembered filters, leaving the tables alone', async () => {
+      component.filters = { ...component.filters, project: ' cms ' };
+      component.applyFilters();
       fixture.detectChanges();
       await fixture.whenStable();
-      fixture.detectChanges();
-    }
 
+      expect(service.pivot.calls.mostRecent().args[0]).toEqual(jasmine.objectContaining({ project: 'cms' }));
+      expect(service.report).toHaveBeenCalledTimes(1); // only the initial summary load
+      expect(JSON.parse(sessionStorage.getItem('tokenusage-pivot-filters')!)).toEqual({ userId: null, project: 'cms', model: null });
+      expect(sessionStorage.getItem('tokenusage-report-filters')).toBeNull();
+      expect(sessionStorage.getItem('tokenusage-report-page')).toBe(JSON.stringify({ first: 0, rows: 20 }));
+    });
+
+    it('opens in the remembered mode', async () => {
+      TestBed.resetTestingModule();
+
+      await setup();
+
+      expect(component.mode).toBe('pivot');
+      expect(service.report).not.toHaveBeenCalled();
+      expect(service.pivot).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('by session', () => {
     beforeEach(async () => {
       await setup();
       await switchTo('依 Session');

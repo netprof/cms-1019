@@ -38,6 +38,16 @@ describe('TokenUsageService', () => {
     req.flush({ items: [], totalRecords: 0, totals: {} });
   });
 
+  it('pivot() POSTs the query to /tokenusages/report/pivot', () => {
+    const query = { from: '2026-10-01', rowDim: 'user', colDim: 'date', dateGrain: 'month' } as const;
+    service.pivot(query).subscribe((r) => expect(r.rows).toEqual([]));
+
+    const req = http.expectOne(`${environment.apiBaseUrl}/tokenusages/report/pivot`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(query);
+    req.flush({ rows: [], columns: [], total: {} });
+  });
+
   it('getUserLookups() GETs /lookups/appusers', () => {
     service.getUserLookups().subscribe((r) => expect(r.length).toBe(1));
 

@@ -414,4 +414,171 @@ public class TokenUsageReportApiTests : IClassFixture<ApiTestFactory>
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
+
+    // ---- pivot ----
+
+    private const string PivotRoute = Route + "/pivot";
+
+    private async Task<HttpResponseMessage> PostPivotAsync(object query) =>
+        await _factory.CreateAuthenticatedClient().PostAsJsonAsync(PivotRoute, query);
+
+    private async Task<TokenUsagePivot> PivotAsync(object query)
+    {
+        var response = await PostPivotAsync(query);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<TokenUsagePivot>(Json))!;
+    }
+
+    [Fact]
+    public async Task Pivot_DefaultsToUsersByMonth_WithCellsAndTotals()
+    {
+        Seed("2026-09-30", userId: "helen", input: 1, output: 10, cost: 1m);
+        Seed("2026-10-01", userId: "helen", input: 2, read: 3, output: 20, cost: 2m);
+        Seed("2026-10-20", userId: "helen", model: "claude-haiku-5", input: 4);
+        Seed("2026-10-20", userId: "jenny", input: 8, cost: 0.5m);
+
+        var pivot = await PivotAsync(new { });
+
+        Assert.Equal(["2026-09", "2026-10"], pivot.Columns.Select(c => c.Key));
+        Assert.Equal(["2026-09", "2026-10"], pivot.Columns.Select(c => c.Label));
+        Assert.Equal(["helen", "jenny"], pivot.Rows.Select(r => r.Key));
+        Assert.Equal(["Helen Wu", "Jenny Lin"], pivot.Rows.Select(r => r.Label));
+        Assert.Equal(["helen", "jenny"], pivot.Rows.Select(r => r.Title));
+
+        var helen = pivot.Rows[0];
+        Assert.Equal(1, helen.Cells["2026-09"].InputTokens);
+        var october = helen.Cells["2026-10"]; // both models summed
+        Assert.Equal((6L, 3L, 9L, 20L, 2m), (october.InputTokens, october.CacheReadTokens, october.TokenIn, october.OutputTokens, october.Cost));
+        Assert.Equal((7L, 3m), (helen.Total.InputTokens, helen.Total.Cost));
+
+        Assert.False(pivot.Rows[1].Cells.ContainsKey("2026-09")); // no data, no cell
+        Assert.Equal([1L, 14L], pivot.Columns.Select(c => c.Total.InputTokens));
+        Assert.Equal((15L, 3.5m), (pivot.Total.InputTokens, pivot.Total.Cost));
+    }
+
+    [Fact]
+    public async Task Pivot_WithoutColumnDimension_HasRowTotalsOnly()
+    {
+        Seed("2026-10-20", project: "netprof/cms", input: 1);
+        Seed("2026-10-21", project: "netprof/other", input: 2);
+
+        var pivot = await PivotAsync(new { rowDim = "project", colDim = (string?)null });
+
+        Assert.Empty(pivot.Columns);
+        Assert.Equal(["netprof/cms", "netprof/other"], pivot.Rows.Select(r => r.Label));
+        Assert.All(pivot.Rows, r => Assert.Empty(r.Cells));
+        Assert.All(pivot.Rows, r => Assert.Null(r.Title));
+        Assert.Equal([1L, 2L], pivot.Rows.Select(r => r.Total.InputTokens));
+        Assert.Equal(3L, pivot.Total.InputTokens);
+    }
+
+    [Fact]
+    public async Task Pivot_ModelsByDay_LabelsDaysAscending()
+    {
+        Seed("2026-10-21", model: "claude-opus-5-5");
+        Seed("2026-10-20", model: "claude-haiku-5");
+
+        var pivot = await PivotAsync(new { rowDim = "model", colDim = "date", dateGrain = "day" });
+
+        Assert.Equal(["2026-10-20", "2026-10-21"], pivot.Columns.Select(c => c.Key));
+        Assert.All(pivot.Columns, c => Assert.Null(c.Title));
+        Assert.Equal(["claude-haiku-5", "claude-opus-5-5"], pivot.Rows.Select(r => r.Key));
+    }
+
+    [Fact]
+    public async Task Pivot_WeekGrain_UsesIsoWeeks_AcrossTheYearBoundary()
+    {
+        Seed("2026-12-27", input: 1); // Sunday of 2026-W52
+        Seed("2026-12-28", input: 2); // Monday of 2026-W53
+        Seed("2027-01-03", input: 4); // Sunday, still 2026-W53
+        Seed("2027-01-04", input: 8); // Monday of 2027-W01
+
+        var pivot = await PivotAsync(new { rowDim = "date", colDim = (string?)null, dateGrain = "week" });
+
+        Assert.Equal(["2026-W52", "2026-W53", "2027-W01"], pivot.Rows.Select(r => r.Label));
+        Assert.Equal(["2026-12-21 ~ 2026-12-27", "2026-12-28 ~ 2027-01-03", "2027-01-04 ~ 2027-01-10"],
+            pivot.Rows.Select(r => r.Title));
+        Assert.Equal([1L, 6L, 8L], pivot.Rows.Select(r => r.Total.InputTokens));
+    }
+
+    [Fact]
+    public async Task Pivot_Cost_IsNullOnlyWhereNothingIsPriced()
+    {
+        Seed("2026-10-20", model: "claude-opus-5-5", cost: 1.25m);
+        Seed("2026-10-20", model: "claude-opus-5-5", cost: null);
+        Seed("2026-10-20", model: "claude-new", cost: null);
+
+        var pivot = await PivotAsync(new { rowDim = "model", colDim = "user" });
+
+        Assert.Equal([null, 1.25m], pivot.Rows.Select(r => r.Total.Cost));
+        Assert.Null(pivot.Rows[0].Cells["helen"].Cost);
+        Assert.Equal(1.25m, pivot.Columns.Single().Total.Cost);
+        Assert.Equal(1.25m, pivot.Total.Cost);
+    }
+
+    [Fact]
+    public async Task Pivot_KeysDifferingOnlyInCase_CellsUseTheColumnKey()
+    {
+        Seed("2026-10-19", userId: "jenny", project: "netprof/CMS", input: 1);
+        Seed("2026-10-20", userId: "helen", project: "netprof/cms", input: 2);
+
+        var pivot = await PivotAsync(new { rowDim = "user", colDim = "project" });
+
+        var column = Assert.Single(pivot.Columns);
+        Assert.All(pivot.Rows, r => Assert.Equal(column.Key, Assert.Single(r.Cells).Key));
+        Assert.Equal(3L, column.Total.InputTokens);
+    }
+
+    [Fact]
+    public async Task Pivot_AppliesTheReportFilters()
+    {
+        Seed("2026-10-19", input: 1);
+        Seed("2026-10-20", input: 2);
+        Seed("2026-10-20", userId: "jenny", input: 4);
+        Seed("2026-10-20", model: "claude-haiku-5", input: 8);
+
+        var pivot = await PivotAsync(new { from = "2026-10-20", userId = "helen", model = "opus" });
+
+        Assert.Equal(2L, pivot.Total.InputTokens);
+    }
+
+    [Fact]
+    public async Task Pivot_NoMatchingRows_IsEmpty()
+    {
+        var pivot = await PivotAsync(new { });
+
+        Assert.Empty(pivot.Rows);
+        Assert.Empty(pivot.Columns);
+        Assert.Equal((0L, (decimal?)null), (pivot.Total.InputTokens, pivot.Total.Cost));
+    }
+
+    [Fact]
+    public async Task Pivot_IgnoresDateGrain_WhenNoAxisIsDate()
+    {
+        Seed("2026-10-20");
+
+        var pivot = await PivotAsync(new { rowDim = "user", colDim = "model", dateGrain = "year" });
+
+        Assert.Single(pivot.Rows);
+    }
+
+    public static TheoryData<object> InvalidPivotQueries => new()
+    {
+        new { rowDim = "session" },
+        new { rowDim = (string?)null },
+        new { colDim = "usageDate" },
+        new { rowDim = "model", colDim = "model" },
+        new { rowDim = "date", colDim = "user", dateGrain = "year" },
+        new { rowDim = "user", colDim = "date", dateGrain = (string?)null },
+        new { from = "2026-10-20", to = "2026-10-19" },
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidPivotQueries))]
+    public async Task Pivot_InvalidQuery_Returns400(object query)
+    {
+        var response = await PostPivotAsync(query);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
 }
