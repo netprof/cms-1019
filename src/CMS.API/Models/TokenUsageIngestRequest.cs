@@ -17,6 +17,10 @@ public class TokenUsageIngestRequest
     [Required, StringLength(200)]
     public string Project { get; set; } = "";
 
+    /// <summary>Optional; when null or blank the session keeps the name already stored for it.</summary>
+    [StringLength(200)]
+    public string? SessionName { get; set; }
+
     [Required]
     public List<TokenUsageIngestRow> Rows { get; set; } = new();
 }

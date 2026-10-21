@@ -1,7 +1,19 @@
 <p-toast />
 
 <div class="page-header">
-  <h1>用量報表 TokenUsage <small>Claude Code token 用量（依使用者、日期、專案、模型彙總）</small></h1>
+  <h1>
+    用量報表 TokenUsage
+    <small>Claude Code token 用量（{{ mode === 'session' ? '依 Session 彙總' : '依使用者、日期、專案、模型彙總' }}）</small>
+  </h1>
+  <p-selectbutton
+    id="mode-toggle"
+    [options]="modeOptions"
+    optionLabel="label"
+    optionValue="value"
+    [ngModel]="mode"
+    (ngModelChange)="setMode($event)"
+    [allowEmpty]="false"
+  />
 </div>
 
 <div class="card filter-bar">
@@ -36,6 +48,12 @@
     <label for="f-model">模型</label>
     <input pInputText id="f-model" [(ngModel)]="filters.model" placeholder="包含文字" (keyup.enter)="applyFilters()" />
   </div>
+  @if (mode === 'session') {
+    <div class="field">
+      <label for="f-sessionName">Session 名稱</label>
+      <input pInputText id="f-sessionName" [(ngModel)]="filters.sessionName" placeholder="包含文字" (keyup.enter)="applyFilters()" />
+    </div>
+  }
   <div class="actions">
     <p-button id="search-button" label="搜尋" icon="pi pi-search" (onClick)="applyFilters()" />
     <p-button id="clear-button" label="清除" icon="pi pi-times" severity="secondary" (onClick)="clearFilters()" />
@@ -43,69 +61,148 @@
 </div>
 
 <div class="card">
-  <p-table
-    [value]="rows()"
-    [lazy]="true"
-    (onLazyLoad)="onLazyLoad($event)"
-    [totalRecords]="totalRecords()"
-    [loading]="loading()"
-    [paginator]="true"
-    [rows]="page.rows"
-    [first]="page.first"
-    [rowsPerPageOptions]="[10, 20, 50, 100]"
-    [showCurrentPageReport]="true"
-    currentPageReportTemplate="{first}–{last} 筆，共 {totalRecords} 筆"
-    [sortField]="sort.field"
-    [sortOrder]="sort.order"
-    [tableStyle]="{ 'min-width': '80rem' }"
-  >
-    <ng-template #header>
-      <tr>
-        <th pSortableColumn="usageDate" style="width: 8rem">日期 <p-sortIcon field="usageDate" /></th>
-        <th pSortableColumn="userId">使用者 <p-sortIcon field="userId" /></th>
-        <th pSortableColumn="project">專案 <p-sortIcon field="project" /></th>
-        <th pSortableColumn="model">模型 <p-sortIcon field="model" /></th>
-        <th pSortableColumn="inputTokens" class="num">Input <p-sortIcon field="inputTokens" /></th>
-        <th pSortableColumn="cacheWrite5mTokens" class="num">Cache Write 5m <p-sortIcon field="cacheWrite5mTokens" /></th>
-        <th pSortableColumn="cacheWrite1hTokens" class="num">Cache Write 1h <p-sortIcon field="cacheWrite1hTokens" /></th>
-        <th pSortableColumn="cacheReadTokens" class="num">Cache Read <p-sortIcon field="cacheReadTokens" /></th>
-        <th pSortableColumn="outputTokens" class="num">Output <p-sortIcon field="outputTokens" /></th>
-        <th pSortableColumn="tokenIn" class="num" title="Input + Cache Write 5m + Cache Write 1h + Cache Read">Token In <p-sortIcon field="tokenIn" /></th>
-        <th pSortableColumn="cost" class="num">費用 (USD) <p-sortIcon field="cost" /></th>
-      </tr>
-    </ng-template>
-    <ng-template #body let-r>
-      <tr>
-        <td>{{ r.usageDate }}</td>
-        <td>{{ r.userId }} <span class="user-name">{{ r.userName }}</span></td>
-        <td>{{ r.project }}</td>
-        <td>{{ r.model }}</td>
-        <td class="num">{{ r.inputTokens | number }}</td>
-        <td class="num">{{ r.cacheWrite5mTokens | number }}</td>
-        <td class="num">{{ r.cacheWrite1hTokens | number }}</td>
-        <td class="num">{{ r.cacheReadTokens | number }}</td>
-        <td class="num">{{ r.outputTokens | number }}</td>
-        <td class="num">{{ r.tokenIn | number }}</td>
-        <td class="num">{{ r.cost == null ? '' : (r.cost | number: '1.2-6') }}</td>
-      </tr>
-    </ng-template>
-    <ng-template #footer>
-      @let t = totals();
-      <tr class="totals-row">
-        <td colspan="4">合計</td>
-        <td class="num">{{ t.inputTokens | number }}</td>
-        <td class="num">{{ t.cacheWrite5mTokens | number }}</td>
-        <td class="num">{{ t.cacheWrite1hTokens | number }}</td>
-        <td class="num">{{ t.cacheReadTokens | number }}</td>
-        <td class="num">{{ t.outputTokens | number }}</td>
-        <td class="num">{{ t.tokenIn | number }}</td>
-        <td class="num">{{ t.cost == null ? '' : (t.cost | number: '1.2-6') }}</td>
-      </tr>
-    </ng-template>
-    <ng-template #emptymessage>
-      <tr>
-        <td colspan="11" style="text-align: center">沒有符合的資料</td>
-      </tr>
-    </ng-template>
-  </p-table>
+  @if (mode === 'summary') {
+    <p-table
+      id="summary-table"
+      [value]="rows()"
+      [lazy]="true"
+      (onLazyLoad)="onLazyLoad($event)"
+      [totalRecords]="totalRecords()"
+      [loading]="loading()"
+      [paginator]="true"
+      [rows]="page.rows"
+      [first]="page.first"
+      [rowsPerPageOptions]="[10, 20, 50, 100]"
+      [showCurrentPageReport]="true"
+      currentPageReportTemplate="{first}–{last} 筆，共 {totalRecords} 筆"
+      [sortField]="sort.field"
+      [sortOrder]="sort.order"
+      [tableStyle]="{ 'min-width': '80rem' }"
+    >
+      <ng-template #header>
+        <tr>
+          <th pSortableColumn="usageDate" style="width: 8rem">日期 <p-sortIcon field="usageDate" /></th>
+          <th pSortableColumn="userId">使用者 <p-sortIcon field="userId" /></th>
+          <th pSortableColumn="project">專案 <p-sortIcon field="project" /></th>
+          <th pSortableColumn="model">模型 <p-sortIcon field="model" /></th>
+          <th pSortableColumn="inputTokens" class="num">Input <p-sortIcon field="inputTokens" /></th>
+          <th pSortableColumn="cacheWrite5mTokens" class="num">Cache Write 5m <p-sortIcon field="cacheWrite5mTokens" /></th>
+          <th pSortableColumn="cacheWrite1hTokens" class="num">Cache Write 1h <p-sortIcon field="cacheWrite1hTokens" /></th>
+          <th pSortableColumn="cacheReadTokens" class="num">Cache Read <p-sortIcon field="cacheReadTokens" /></th>
+          <th pSortableColumn="outputTokens" class="num">Output <p-sortIcon field="outputTokens" /></th>
+          <th pSortableColumn="tokenIn" class="num" title="Input + Cache Write 5m + Cache Write 1h + Cache Read">Token In <p-sortIcon field="tokenIn" /></th>
+          <th pSortableColumn="cost" class="num">費用 (USD) <p-sortIcon field="cost" /></th>
+        </tr>
+      </ng-template>
+      <ng-template #body let-r>
+        <tr>
+          <td>{{ r.usageDate }}</td>
+          <td>{{ r.userId }} <span class="user-name">{{ r.userName }}</span></td>
+          <td>{{ r.project }}</td>
+          <td>{{ r.model }}</td>
+          <td class="num">{{ r.inputTokens | number }}</td>
+          <td class="num">{{ r.cacheWrite5mTokens | number }}</td>
+          <td class="num">{{ r.cacheWrite1hTokens | number }}</td>
+          <td class="num">{{ r.cacheReadTokens | number }}</td>
+          <td class="num">{{ r.outputTokens | number }}</td>
+          <td class="num">{{ r.tokenIn | number }}</td>
+          <td class="num">{{ r.cost == null ? '' : (r.cost | number: '1.2-6') }}</td>
+        </tr>
+      </ng-template>
+      <ng-template #footer>
+        @let t = totals();
+        <tr class="totals-row">
+          <td colspan="4">合計</td>
+          <td class="num">{{ t.inputTokens | number }}</td>
+          <td class="num">{{ t.cacheWrite5mTokens | number }}</td>
+          <td class="num">{{ t.cacheWrite1hTokens | number }}</td>
+          <td class="num">{{ t.cacheReadTokens | number }}</td>
+          <td class="num">{{ t.outputTokens | number }}</td>
+          <td class="num">{{ t.tokenIn | number }}</td>
+          <td class="num">{{ t.cost == null ? '' : (t.cost | number: '1.2-6') }}</td>
+        </tr>
+      </ng-template>
+      <ng-template #emptymessage>
+        <tr>
+          <td colspan="11" style="text-align: center">沒有符合的資料</td>
+        </tr>
+      </ng-template>
+    </p-table>
+  } @else {
+    <p-table
+      id="session-table"
+      [value]="sessionRows()"
+      [lazy]="true"
+      (onLazyLoad)="onLazyLoad($event)"
+      [totalRecords]="totalRecords()"
+      [loading]="loading()"
+      [paginator]="true"
+      [rows]="page.rows"
+      [first]="page.first"
+      [rowsPerPageOptions]="[10, 20, 50, 100]"
+      [showCurrentPageReport]="true"
+      currentPageReportTemplate="{first}–{last} 筆，共 {totalRecords} 筆"
+      [sortField]="sort.field"
+      [sortOrder]="sort.order"
+      [tableStyle]="{ 'min-width': '90rem' }"
+    >
+      <ng-template #header>
+        <tr>
+          <th pSortableColumn="sessionName">Session <p-sortIcon field="sessionName" /></th>
+          <th pSortableColumn="lastDate" style="width: 12rem">日期 <p-sortIcon field="lastDate" /></th>
+          <th pSortableColumn="userId">使用者 <p-sortIcon field="userId" /></th>
+          <th pSortableColumn="project">專案 <p-sortIcon field="project" /></th>
+          <th pSortableColumn="models">模型 <p-sortIcon field="models" /></th>
+          <th pSortableColumn="inputTokens" class="num">Input <p-sortIcon field="inputTokens" /></th>
+          <th pSortableColumn="cacheWrite5mTokens" class="num">Cache Write 5m <p-sortIcon field="cacheWrite5mTokens" /></th>
+          <th pSortableColumn="cacheWrite1hTokens" class="num">Cache Write 1h <p-sortIcon field="cacheWrite1hTokens" /></th>
+          <th pSortableColumn="cacheReadTokens" class="num">Cache Read <p-sortIcon field="cacheReadTokens" /></th>
+          <th pSortableColumn="outputTokens" class="num">Output <p-sortIcon field="outputTokens" /></th>
+          <th pSortableColumn="tokenIn" class="num" title="Input + Cache Write 5m + Cache Write 1h + Cache Read">Token In <p-sortIcon field="tokenIn" /></th>
+          <th pSortableColumn="cost" class="num">費用 (USD) <p-sortIcon field="cost" /></th>
+        </tr>
+      </ng-template>
+      <ng-template #body let-r>
+        <tr>
+          <td>
+            @if (r.sessionName) {
+              {{ r.sessionName }}
+            } @else {
+              <span class="muted">（未命名）</span>
+            }
+            <span class="session-id muted">{{ r.sessionId }}</span>
+          </td>
+          <td class="nowrap">{{ dateRange(r) }}</td>
+          <td>{{ r.userId }} <span class="user-name">{{ r.userName }}</span></td>
+          <td>{{ r.project }}</td>
+          <td>{{ r.models }}</td>
+          <td class="num">{{ r.inputTokens | number }}</td>
+          <td class="num">{{ r.cacheWrite5mTokens | number }}</td>
+          <td class="num">{{ r.cacheWrite1hTokens | number }}</td>
+          <td class="num">{{ r.cacheReadTokens | number }}</td>
+          <td class="num">{{ r.outputTokens | number }}</td>
+          <td class="num">{{ r.tokenIn | number }}</td>
+          <td class="num">{{ r.cost == null ? '' : (r.cost | number: '1.2-6') }}</td>
+        </tr>
+      </ng-template>
+      <ng-template #footer>
+        @let t = totals();
+        <tr class="totals-row">
+          <td colspan="5">合計</td>
+          <td class="num">{{ t.inputTokens | number }}</td>
+          <td class="num">{{ t.cacheWrite5mTokens | number }}</td>
+          <td class="num">{{ t.cacheWrite1hTokens | number }}</td>
+          <td class="num">{{ t.cacheReadTokens | number }}</td>
+          <td class="num">{{ t.outputTokens | number }}</td>
+          <td class="num">{{ t.tokenIn | number }}</td>
+          <td class="num">{{ t.cost == null ? '' : (t.cost | number: '1.2-6') }}</td>
+        </tr>
+      </ng-template>
+      <ng-template #emptymessage>
+        <tr>
+          <td colspan="12" style="text-align: center">沒有符合的資料</td>
+        </tr>
+      </ng-template>
+    </p-table>
+  }
 </div>

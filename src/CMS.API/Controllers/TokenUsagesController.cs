@@ -34,6 +34,7 @@ public class TokenUsagesController(
             Model = r.Model,
             UserId = request.UserId,
             Project = request.Project,
+            SessionName = request.SessionName,
             InputTokens = r.InputTokens,
             CacheWrite5mTokens = r.CacheWrite5mTokens,
             CacheWrite1hTokens = r.CacheWrite1hTokens,
@@ -51,25 +52,52 @@ public class TokenUsagesController(
     [HttpPost("report")]
     public async Task<ActionResult<TokenUsageReport>> Report(TokenUsageReportQuery query)
     {
-        if (query.From > query.To)
-            ModelState.AddModelError(nameof(query.To), "To must not be earlier than From.");
-        if (!ReportSorts.TryGetValue(query.SortField, out var sort))
-            ModelState.AddModelError(nameof(query.SortField), $"Cannot sort by '{query.SortField}'.");
-        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+        if (!ValidateReportQuery(query, ReportSorts, out var sort)) return ValidationProblem(ModelState);
 
-        // Aggregated rows are few (users x days x projects x models), so sort and page in memory,
-        // as the other list pages do client-side.
         var rows = await repository.GetReportRowsAsync(query);
-        var page = sort!(rows, query.SortOrder == 1)
+        return Ok(BuildReport<TokenUsageReport, TokenUsageReportRow>(rows, query, sort, sorted => sorted
             .ThenByDescending(r => r.UsageDate)
             .ThenBy(r => r.UserId, SqlCollation.Comparer)
             .ThenBy(r => r.Project, SqlCollation.Comparer)
-            .ThenBy(r => r.Model, SqlCollation.Comparer)
+            .ThenBy(r => r.Model, SqlCollation.Comparer)));
+    }
+
+    /// <summary>Usage summed by session (filters apply to the rows before summing): one sorted page plus totals.</summary>
+    [HttpPost("report/sessions")]
+    public async Task<ActionResult<TokenUsageSessionReport>> SessionReport(TokenUsageSessionReportQuery query)
+    {
+        if (!ValidateReportQuery(query, SessionSorts, out var sort)) return ValidationProblem(ModelState);
+
+        var rows = await repository.GetSessionReportRowsAsync(query);
+        return Ok(BuildReport<TokenUsageSessionReport, TokenUsageSessionRow>(rows, query, sort, sorted => sorted
+            .ThenByDescending(r => r.LastDate)
+            .ThenBy(r => r.SessionId, SqlCollation.Comparer)));
+    }
+
+    private bool ValidateReportQuery<TRow>(
+        TokenUsageReportQuery query, Dictionary<string, ReportSort<TRow>> sorts, out ReportSort<TRow> sort)
+    {
+        if (query.From > query.To)
+            ModelState.AddModelError(nameof(query.To), "To must not be earlier than From.");
+        if (!sorts.TryGetValue(query.SortField, out sort!))
+            ModelState.AddModelError(nameof(query.SortField), $"Cannot sort by '{query.SortField}'.");
+        return ModelState.IsValid;
+    }
+
+    private static TReport BuildReport<TReport, TRow>(
+        IReadOnlyList<TRow> rows, TokenUsageReportQuery query, ReportSort<TRow> sort,
+        Func<IOrderedEnumerable<TRow>, IOrderedEnumerable<TRow>> thenBy)
+        where TReport : TokenUsageReport<TRow>, new()
+        where TRow : TokenUsageReportTotals
+    {
+        // Aggregated rows are few (users x days x projects x models, or sessions), so sort and page
+        // in memory, as the other list pages do client-side.
+        var page = thenBy(sort(rows, query.SortOrder == 1))
             .Skip(query.First)
             .Take(query.Rows)
             .ToList();
 
-        return Ok(new TokenUsageReport
+        return new TReport
         {
             Items = page,
             TotalRecords = rows.Count,
@@ -82,42 +110,66 @@ public class TokenUsagesController(
                 OutputTokens = rows.Sum(r => r.OutputTokens),
                 Cost = rows.Any(r => r.Cost.HasValue) ? rows.Sum(r => r.Cost) : null,
             },
-        });
+        };
     }
 
-    private delegate IOrderedEnumerable<TokenUsageReportRow> ReportSort(IEnumerable<TokenUsageReportRow> rows, bool ascending);
+    private delegate IOrderedEnumerable<TRow> ReportSort<TRow>(IEnumerable<TRow> rows, bool ascending);
 
-    private static ReportSort By<TKey>(Func<TokenUsageReportRow, TKey> key, IComparer<TKey>? comparer = null) =>
-        (rows, ascending) => ascending ? rows.OrderBy(key, comparer) : rows.OrderByDescending(key, comparer);
-
-    private static ReportSort ByText(Func<TokenUsageReportRow, string> key) => By(key, SqlCollation.Comparer);
-
-    /// <summary>Sortable report columns by their JSON (camelCase) name.</summary>
-    private static readonly Dictionary<string, ReportSort> ReportSorts = new(StringComparer.OrdinalIgnoreCase)
+    /// <summary>Sort builders for one row type, so the key type is inferred from the lambda.</summary>
+    private static class Sorts<TRow> where TRow : TokenUsageReportTotals
     {
-        ["usageDate"] = By(r => r.UsageDate),
-        ["userId"] = ByText(r => r.UserId),
-        ["userName"] = ByText(r => r.UserName),
-        ["project"] = ByText(r => r.Project),
-        ["model"] = ByText(r => r.Model),
-        ["inputTokens"] = By(r => r.InputTokens),
-        ["cacheWrite5mTokens"] = By(r => r.CacheWrite5mTokens),
-        ["cacheWrite1hTokens"] = By(r => r.CacheWrite1hTokens),
-        ["cacheReadTokens"] = By(r => r.CacheReadTokens),
-        ["outputTokens"] = By(r => r.OutputTokens),
-        ["tokenIn"] = By(r => r.TokenIn),
-        ["cost"] = By(r => r.Cost),
-    };
+        public static ReportSort<TRow> By<TKey>(Func<TRow, TKey> key, IComparer<TKey>? comparer = null) =>
+            (rows, ascending) => ascending ? rows.OrderBy(key, comparer) : rows.OrderByDescending(key, comparer);
+
+        public static ReportSort<TRow> ByText(Func<TRow, string?> key) => By(key, SqlCollation.Comparer);
+
+        /// <summary>A report's sortable columns by JSON (camelCase) name: <paramref name="columns"/> plus the token sums.</summary>
+        public static Dictionary<string, ReportSort<TRow>> With(Dictionary<string, ReportSort<TRow>> columns)
+        {
+            columns["inputTokens"] = By(r => r.InputTokens);
+            columns["cacheWrite5mTokens"] = By(r => r.CacheWrite5mTokens);
+            columns["cacheWrite1hTokens"] = By(r => r.CacheWrite1hTokens);
+            columns["cacheReadTokens"] = By(r => r.CacheReadTokens);
+            columns["outputTokens"] = By(r => r.OutputTokens);
+            columns["tokenIn"] = By(r => r.TokenIn);
+            columns["cost"] = By(r => r.Cost);
+            return columns;
+        }
+    }
+
+    private static readonly Dictionary<string, ReportSort<TokenUsageReportRow>> ReportSorts =
+        Sorts<TokenUsageReportRow>.With(new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["usageDate"] = Sorts<TokenUsageReportRow>.By(r => r.UsageDate),
+            ["userId"] = Sorts<TokenUsageReportRow>.ByText(r => r.UserId),
+            ["userName"] = Sorts<TokenUsageReportRow>.ByText(r => r.UserName),
+            ["project"] = Sorts<TokenUsageReportRow>.ByText(r => r.Project),
+            ["model"] = Sorts<TokenUsageReportRow>.ByText(r => r.Model),
+        });
+
+    private static readonly Dictionary<string, ReportSort<TokenUsageSessionRow>> SessionSorts =
+        Sorts<TokenUsageSessionRow>.With(new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["sessionName"] = Sorts<TokenUsageSessionRow>.ByText(r => r.SessionName),
+            ["sessionId"] = Sorts<TokenUsageSessionRow>.ByText(r => r.SessionId),
+            ["userId"] = Sorts<TokenUsageSessionRow>.ByText(r => r.UserId),
+            ["userName"] = Sorts<TokenUsageSessionRow>.ByText(r => r.UserName),
+            ["project"] = Sorts<TokenUsageSessionRow>.ByText(r => r.Project),
+            ["firstDate"] = Sorts<TokenUsageSessionRow>.By(r => r.FirstDate),
+            ["lastDate"] = Sorts<TokenUsageSessionRow>.By(r => r.LastDate),
+            ["models"] = Sorts<TokenUsageSessionRow>.ByText(r => r.Models),
+        });
 
     /// <summary>Taipei is a fixed UTC+8 (no DST); the server itself has no time-zone handling.</summary>
     private static readonly TimeSpan TaipeiOffset = TimeSpan.FromHours(8);
 
-    /// <summary>Trims text so it matches how SQL Server compares keys (trailing spaces ignored).</summary>
+    /// <summary>Trims text so it matches how SQL Server compares keys (trailing spaces ignored); a blank name is no name.</summary>
     private static void Normalize(TokenUsageIngestRequest request)
     {
         request.SessionId = request.SessionId.Trim();
         request.UserId = request.UserId.Trim();
         request.Project = request.Project.Trim();
+        request.SessionName = string.IsNullOrWhiteSpace(request.SessionName) ? null : request.SessionName.Trim();
         foreach (var row in request.Rows) row.Model = row.Model.Trim();
     }
 

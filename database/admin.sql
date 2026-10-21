@@ -164,6 +164,7 @@ CREATE TABLE [dbo].[TokenUsage](
 	[Model] [nvarchar](100) NOT NULL,
 	[UserId] [nvarchar](200) NOT NULL,
 	[Project] [nvarchar](200) NOT NULL,
+	[SessionName] [nvarchar](200) NULL,
 	[InputTokens] [bigint] NOT NULL,
 	[CacheWrite5mTokens] [bigint] NOT NULL,
 	[CacheWrite1hTokens] [bigint] NOT NULL,

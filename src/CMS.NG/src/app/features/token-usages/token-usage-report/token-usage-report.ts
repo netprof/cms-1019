@@ -1,11 +1,13 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Observable } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { DatePickerModule } from 'primeng/datepicker';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
+import { SelectButtonModule } from 'primeng/selectbutton';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { parseIso, taipeiToday, toIso } from '../../../core/utils/date.util';
@@ -13,14 +15,23 @@ import {
   AppUserLookup,
   TokenUsageReport as Report,
   TokenUsageReportFilters,
+  TokenUsageReportQuery,
   TokenUsageReportRow,
+  TokenUsageSessionRow,
   TokenUsageTotals,
 } from '../token-usage.model';
 import { TokenUsageService } from '../token-usage.service';
 
-const FILTERS_KEY = 'tokenusage-report-filters';
-const SORT_KEY = 'tokenusage-report-sort';
-const PAGE_KEY = 'tokenusage-report-page';
+/** `summary`: by (user, date, project, model); `session`: one row per session. */
+export type ReportMode = 'summary' | 'session';
+
+const MODE_KEY = 'tokenusage-report-mode';
+
+/** Each mode remembers its own filters, sort and page. */
+const KEYS: Record<ReportMode, { filters: string; sort: string; page: string }> = {
+  summary: { filters: 'tokenusage-report-filters', sort: 'tokenusage-report-sort', page: 'tokenusage-report-page' },
+  session: { filters: 'tokenusage-sessions-filters', sort: 'tokenusage-sessions-sort', page: 'tokenusage-sessions-page' },
+};
 
 interface SortState {
   field: string;
@@ -31,6 +42,13 @@ interface PageState {
   first: number;
   rows: number;
 }
+
+const DEFAULT_SORT: Record<ReportMode, SortState> = {
+  summary: { field: 'usageDate', order: -1 },
+  session: { field: 'lastDate', order: -1 },
+};
+
+const DEFAULT_PAGE: PageState = { first: 0, rows: 20 };
 
 /** The subset of PrimeNG's TableLazyLoadEvent this page uses. */
 export interface LazyLoad {
@@ -63,8 +81,11 @@ function save(key: string, value: unknown) {
   }
 }
 
-/** The 1st of this month through today, in Taipei dates (as `UsageDate` is), no other filters. */
-function defaultFilters(): TokenUsageReportFilters {
+/**
+ * The 1st of this month through today, in Taipei dates (as `UsageDate` is), no other filters.
+ * Only the session mode has a session-name filter.
+ */
+function defaultFilters(mode: ReportMode): TokenUsageReportFilters {
   const today = taipeiToday();
   return {
     from: toIso(new Date(today.getFullYear(), today.getMonth(), 1)),
@@ -72,6 +93,7 @@ function defaultFilters(): TokenUsageReportFilters {
     userId: null,
     project: null,
     model: null,
+    ...(mode === 'session' ? { sessionName: null } : {}),
   };
 }
 
@@ -79,14 +101,14 @@ function defaultFilters(): TokenUsageReportFilters {
  * Saved filters over today's defaults. The date range is saved only when it differs from the
  * default, so an untouched "this month to date" keeps following today after midnight.
  */
-function loadFilters(): TokenUsageReportFilters {
-  return { ...defaultFilters(), ...load<Partial<TokenUsageReportFilters>>(FILTERS_KEY, {}) };
+function loadFilters(mode: ReportMode): TokenUsageReportFilters {
+  return { ...defaultFilters(mode), ...load<Partial<TokenUsageReportFilters>>(KEYS[mode].filters, {}) };
 }
 
-function saveFilters(filters: TokenUsageReportFilters) {
-  const defaults = defaultFilters();
+function saveFilters(mode: ReportMode, filters: TokenUsageReportFilters) {
+  const defaults = defaultFilters(mode);
   const { from, to, ...rest } = filters;
-  save(FILTERS_KEY, from === defaults.from && to === defaults.to ? rest : filters);
+  save(KEYS[mode].filters, from === defaults.from && to === defaults.to ? rest : filters);
 }
 
 const emptyTotals: TokenUsageTotals = {
@@ -99,12 +121,33 @@ const emptyTotals: TokenUsageTotals = {
   cost: null,
 };
 
-/** Read-only Token Usage report: server-side paged/sorted, with a totals row for the filtered set. */
+/**
+ * Read-only Token Usage report: server-side paged/sorted, with a totals row for the filtered set.
+ * Shows either the (user, date, project, model) summary or one row per session.
+ */
 @Component({
   selector: 'app-token-usage-report',
-  imports: [DecimalPipe, FormsModule, ButtonModule, DatePickerModule, InputTextModule, SelectModule, TableModule, ToastModule],
+  imports: [
+    DecimalPipe,
+    FormsModule,
+    ButtonModule,
+    DatePickerModule,
+    InputTextModule,
+    SelectModule,
+    SelectButtonModule,
+    TableModule,
+    ToastModule,
+  ],
   templateUrl: './token-usage-report.html',
   styles: `
+    .page-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
     .filter-bar {
       display: flex;
       flex-wrap: wrap;
@@ -128,8 +171,18 @@ const emptyTotals: TokenUsageTotals = {
       white-space: nowrap;
     }
 
-    .user-name {
+    .nowrap {
+      white-space: nowrap;
+    }
+
+    .user-name,
+    .muted {
       color: #6b7280;
+    }
+
+    .session-id {
+      display: block;
+      font-size: 0.75rem;
     }
 
     .totals-row td {
@@ -141,16 +194,23 @@ export class TokenUsageReport implements OnInit {
   private readonly service = inject(TokenUsageService);
   private readonly messages = inject(MessageService);
 
+  readonly modeOptions: { label: string; value: ReportMode }[] = [
+    { label: '彙總', value: 'summary' },
+    { label: '依 Session', value: 'session' },
+  ];
+
   readonly rows = signal<TokenUsageReportRow[]>([]);
+  readonly sessionRows = signal<TokenUsageSessionRow[]>([]);
   readonly totalRecords = signal(0);
   readonly totals = signal<TokenUsageTotals>(emptyTotals);
   readonly loading = signal(false);
   readonly users = signal<AppUserLookup[]>([]);
 
-  filters: TokenUsageReportFilters = loadFilters();
+  mode: ReportMode = load<ReportMode>(MODE_KEY, 'summary') === 'session' ? 'session' : 'summary';
+  filters: TokenUsageReportFilters = loadFilters(this.mode);
   dates: DateFilters = { from: null, to: null };
-  sort: SortState = load<SortState>(SORT_KEY, { field: 'usageDate', order: -1 });
-  page: PageState = load<PageState>(PAGE_KEY, { first: 0, rows: 20 });
+  sort: SortState = load<SortState>(KEYS[this.mode].sort, DEFAULT_SORT[this.mode]);
+  page: PageState = load<PageState>(KEYS[this.mode].page, DEFAULT_PAGE);
 
   ngOnInit() {
     this.syncDatesFromFilters();
@@ -171,28 +231,51 @@ export class TokenUsageReport implements OnInit {
     this.dates = { from: parseIso(this.filters.from), to: parseIso(this.filters.to) };
   }
 
+  /**
+   * Switches to the other report with its own remembered state. The template swaps tables,
+   * and the new table's initial onLazyLoad fetches.
+   */
+  setMode(mode: ReportMode) {
+    if (!mode) return; // p-selectbutton emits null when the selected option is clicked again
+    this.mode = mode;
+    save(MODE_KEY, mode);
+    this.filters = loadFilters(mode);
+    this.syncDatesFromFilters();
+    this.sort = load<SortState>(KEYS[mode].sort, DEFAULT_SORT[mode]);
+    this.page = load<PageState>(KEYS[mode].page, DEFAULT_PAGE);
+    this.rows.set([]);
+    this.sessionRows.set([]);
+    this.totalRecords.set(0);
+    this.totals.set(emptyTotals);
+  }
+
   fetch() {
+    const query: TokenUsageReportQuery = {
+      ...this.filters,
+      first: this.page.first,
+      rows: this.page.rows,
+      sortField: this.sort.field,
+      sortOrder: this.sort.order,
+    };
+    const mode = this.mode;
+    const request: Observable<Report<TokenUsageReportRow | TokenUsageSessionRow>> =
+      mode === 'session' ? this.service.sessionReport(query) : this.service.report(query);
+
     this.loading.set(true);
-    this.service
-      .report({
-        ...this.filters,
-        first: this.page.first,
-        rows: this.page.rows,
-        sortField: this.sort.field,
-        sortOrder: this.sort.order,
-      })
-      .subscribe({
-        next: (report: Report) => {
-          this.rows.set(report.items);
-          this.totalRecords.set(report.totalRecords);
-          this.totals.set(report.totals);
-          this.loading.set(false);
-        },
-        error: () => {
-          this.loading.set(false);
-          this.messages.add({ severity: 'error', summary: '錯誤', detail: '載入用量報表失敗' });
-        },
-      });
+    request.subscribe({
+      next: (report) => {
+        if (mode !== this.mode) return; // switched while loading
+        if (mode === 'session') this.sessionRows.set(report.items as TokenUsageSessionRow[]);
+        else this.rows.set(report.items as TokenUsageReportRow[]);
+        this.totalRecords.set(report.totalRecords);
+        this.totals.set(report.totals);
+        this.loading.set(false);
+      },
+      error: () => {
+        this.loading.set(false);
+        this.messages.add({ severity: 'error', summary: '錯誤', detail: '載入用量報表失敗' });
+      },
+    });
   }
 
   /** Table sort/page change (and the table's initial load). */
@@ -200,8 +283,8 @@ export class TokenUsageReport implements OnInit {
     const field = Array.isArray(event.sortField) ? event.sortField[0] : event.sortField;
     this.sort = { field: field || this.sort.field, order: event.sortOrder || this.sort.order };
     this.page = { first: event.first ?? 0, rows: event.rows || this.page.rows };
-    save(SORT_KEY, this.sort);
-    save(PAGE_KEY, this.page);
+    save(KEYS[this.mode].sort, this.sort);
+    save(KEYS[this.mode].page, this.page);
     this.fetch();
   }
 
@@ -213,16 +296,22 @@ export class TokenUsageReport implements OnInit {
       userId: this.filters.userId || null,
       project: text(this.filters.project),
       model: text(this.filters.model),
+      ...(this.mode === 'session' ? { sessionName: text(this.filters.sessionName) } : {}),
     };
-    saveFilters(this.filters);
+    saveFilters(this.mode, this.filters);
     this.page = { ...this.page, first: 0 };
-    save(PAGE_KEY, this.page);
+    save(KEYS[this.mode].page, this.page);
     this.fetch();
   }
 
   clearFilters() {
-    this.filters = defaultFilters();
+    this.filters = defaultFilters(this.mode);
     this.syncDatesFromFilters();
     this.applyFilters();
+  }
+
+  /** `yyyy-MM-dd`, or `first ~ last` for a session spanning several days. */
+  dateRange(r: TokenUsageSessionRow): string {
+    return r.firstDate === r.lastDate ? r.firstDate : `${r.firstDate} ~ ${r.lastDate}`;
   }
 }

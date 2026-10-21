@@ -9,12 +9,20 @@
     Paths default to the Claude config dir (%CLAUDE_CONFIG_DIR% or %USERPROFILE%\.claude) and can be
     overridden by these parameters or the TOKEN_USAGE_CONFIG / TOKEN_USAGE_SPOOL_DIR / TOKEN_USAGE_LOG
     environment variables.
+.PARAMETER Backfill
+    Run by hand instead of as a hook: re-sends every session transcript under <Claude config dir>\projects
+    (or -ProjectsDir), then prints a summary. Safe to repeat, since the API replaces each session.
 #>
 param(
     [string]$ConfigPath,
     [string]$SpoolDir,
-    [string]$LogPath
+    [string]$LogPath,
+    [switch]$Backfill,
+    [string]$ProjectsDir
 )
+
+# Matches the API's TokenUsage.SessionName column (nvarchar(200)).
+$script:SessionNameMaxLength = 200
 
 # Taipei is a fixed UTC+8 with no DST, so the machine's own time zone is irrelevant.
 function ConvertTo-TaipeiDate {
@@ -38,14 +46,17 @@ function Get-SessionTranscriptPaths {
 }
 
 # owner/repo of the git remote (origin first), falling back to the cwd's folder name.
+# A cwd that no longer exists (an old transcript's removed worktree) asks git from its nearest existing folder.
 function Get-ProjectName {
     param([Parameter(Mandatory)][string]$Cwd)
+    $gitCwd = $Cwd
+    while ($gitCwd -and -not (Test-Path -LiteralPath $gitCwd -PathType Container)) { $gitCwd = Split-Path $gitCwd -Parent }
     $url = $null
     try {
-        $remotes = @(& git -C $Cwd remote 2>$null)
+        if ($gitCwd) { $remotes = @(& git -C $gitCwd remote 2>$null) } else { $remotes = @() }
         if ($LASTEXITCODE -eq 0 -and $remotes.Count -gt 0) {
             $remote = if ($remotes -contains 'origin') { 'origin' } else { $remotes[0] }
-            $url = (& git -C $Cwd remote get-url $remote 2>$null | Select-Object -First 1)
+            $url = (& git -C $gitCwd remote get-url $remote 2>$null | Select-Object -First 1)
         }
     } catch { $url = $null }
 
@@ -68,11 +79,26 @@ function ConvertTo-TokenUsageReport {
     # reply's earlier lines can carry a partial output_tokens. Keep, per message.id, the largest
     # value of each field (in real transcripts that is the reply's last line).
     $messages = [ordered]@{}
+    # The session's title: the last /rename, else the last title Claude generated. Subagents have none.
+    $customTitle = $null
+    $aiTitle = $null
     foreach ($path in $TranscriptPaths) {
+        $isSubagent = (Split-Path (Split-Path $path -Parent) -Leaf) -eq 'subagents'
         foreach ($line in [System.IO.File]::ReadLines($path, [Text.Encoding]::UTF8)) {
-            # Cheap pre-filter: user/tool-result lines can be large and never carry usage.
-            if ($line.IndexOf('"type":"assistant"', [StringComparison]::Ordinal) -lt 0) { continue }
+            # Cheap pre-filter: user/tool-result lines can be large and never carry usage or a title.
+            # (A match can still be text quoted inside another entry, so the parsed type decides.)
+            $maybeTitle = -not $isSubagent -and ($line.IndexOf('"type":"custom-title"', [StringComparison]::Ordinal) -ge 0 -or
+                $line.IndexOf('"type":"ai-title"', [StringComparison]::Ordinal) -ge 0)
+            if (-not $maybeTitle -and $line.IndexOf('"type":"assistant"', [StringComparison]::Ordinal) -lt 0) { continue }
             try { $entry = $line | ConvertFrom-Json } catch { continue }  # e.g. a half-written last line
+            if ($entry.type -eq 'custom-title') {
+                if (-not $isSubagent -and ([string]$entry.customTitle).Trim()) { $customTitle = ([string]$entry.customTitle).Trim() }
+                continue
+            }
+            if ($entry.type -eq 'ai-title') {
+                if (-not $isSubagent -and ([string]$entry.aiTitle).Trim()) { $aiTitle = ([string]$entry.aiTitle).Trim() }
+                continue
+            }
             if ($entry.type -ne 'assistant') { continue }
             $message = $entry.message
             $usage = $message.usage
@@ -120,12 +146,37 @@ function ConvertTo-TokenUsageReport {
         foreach ($f in $fields) { $row[$f] += $m[$f] }
     }
 
+    $sessionName = if ($customTitle) { $customTitle } else { $aiTitle }
+
     [pscustomobject]@{
-        sessionId = $SessionId
-        userId    = $UserId
-        project   = Get-ProjectName $Cwd
-        rows      = @($groups.Values | ForEach-Object { [pscustomobject]$_ })
+        sessionId   = $SessionId
+        userId      = $UserId
+        project     = Get-ProjectName $Cwd
+        sessionName = Limit-SessionName $sessionName
+        rows        = @($groups.Values | ForEach-Object { [pscustomobject]$_ })
     }
+}
+
+# Cuts a long title to the API's limit rather than have the whole session rejected,
+# without splitting a surrogate pair (the limit counts UTF-16 units, as .NET does).
+function Limit-SessionName {
+    param([string]$Name)
+    if (-not $Name) { return $null }
+    if ($Name.Length -le $script:SessionNameMaxLength) { return $Name }
+    $length = $script:SessionNameMaxLength
+    if ([char]::IsHighSurrogate($Name[$length - 1])) { $length-- }
+    $Name.Substring(0, $length)
+}
+
+# The working directory recorded in a transcript (the first line that has one), or $null.
+function Get-TranscriptCwd {
+    param([Parameter(Mandatory)][string]$TranscriptPath)
+    foreach ($line in [System.IO.File]::ReadLines($TranscriptPath, [Text.Encoding]::UTF8)) {
+        if ($line.IndexOf('"cwd":"', [StringComparison]::Ordinal) -lt 0) { continue }
+        try { $entry = $line | ConvertFrom-Json } catch { continue }
+        if (([string]$entry.cwd).Trim()) { return [string]$entry.cwd }
+    }
+    $null
 }
 
 function Write-HookLog {
@@ -178,21 +229,82 @@ function Invoke-TokenUsageHook {
         $paths = @(Get-SessionTranscriptPaths -TranscriptPath $hook.transcript_path)
         $report = ConvertTo-TokenUsageReport -TranscriptPaths $paths -Cwd $hook.cwd `
             -SessionId $hook.session_id -UserId ([string]$config.userId).Trim()
-        $body = $report | ConvertTo-Json -Depth 5 -Compress
 
-        $result = if ($reachable) { Invoke-Sender $Sender $config $body } else {
-            [pscustomobject]@{ Ok = $false; Reachable = $false; Message = 'API unreachable while re-sending the spool' }
-        }
-        if (Test-Rejected $result) {
-            Save-SpooledPayload -SpoolDir (Join-Path $SpoolDir 'rejected') -SessionId $report.sessionId -Body $body
-            Write-HookLog $LogPath "Session $($report.sessionId) rejected, moved to rejected\ (not retried): $($result.Message)"
-        } elseif (-not $result.Ok) {
-            Save-SpooledPayload -SpoolDir $SpoolDir -SessionId $report.sessionId -Body $body
-            Write-HookLog $LogPath "Session $($report.sessionId) spooled: $($result.Message)"
-        }
+        Submit-TokenUsageReport -Config $config -Report $report -SpoolDir $SpoolDir -LogPath $LogPath `
+            -Sender $Sender -Reachable $reachable | Out-Null
     } catch {
         Write-HookLog $LogPath "Token usage hook failed: $($_.Exception.Message)"
     }
+}
+
+# Sends one report, or (when the API is already known to be unreachable) goes straight to the spool.
+# A 400 goes to rejected\. Returns Outcome ('sent', 'spooled' or 'rejected') and whether the API answered.
+function Submit-TokenUsageReport {
+    param($Config, $Report, [string]$SpoolDir, [string]$LogPath, [scriptblock]$Sender, [bool]$Reachable = $true)
+    $body = $Report | ConvertTo-Json -Depth 5 -Compress
+
+    $result = if ($Reachable) { Invoke-Sender $Sender $Config $body } else {
+        [pscustomobject]@{ Ok = $false; Reachable = $false; Message = 'API unreachable while re-sending the spool' }
+    }
+    $outcome = 'sent'
+    if (Test-Rejected $result) {
+        Save-SpooledPayload -SpoolDir (Join-Path $SpoolDir 'rejected') -SessionId $Report.sessionId -Body $body
+        Write-HookLog $LogPath "Session $($Report.sessionId) rejected, moved to rejected\ (not retried): $($result.Message)"
+        $outcome = 'rejected'
+    } elseif (-not $result.Ok) {
+        Save-SpooledPayload -SpoolDir $SpoolDir -SessionId $Report.sessionId -Body $body
+        Write-HookLog $LogPath "Session $($Report.sessionId) spooled: $($result.Message)"
+        $outcome = 'spooled'
+    }
+    [pscustomobject]@{ Outcome = $outcome; Reachable = [bool]$result.Reachable }
+}
+
+# Manual backfill: reports every main transcript (<projects>\<project>\<session>.jsonl) with its subagents.
+# Sessions without usage or without a recorded cwd are skipped, so nothing stored is ever cleared.
+# Once the API stops answering, the rest go straight to the spool instead of each waiting out the timeout.
+# Returns counts per outcome; never throws.
+function Invoke-TokenUsageBackfill {
+    param(
+        [Parameter(Mandatory)][string]$ProjectsDir,
+        [Parameter(Mandatory)][string]$ConfigPath,
+        [Parameter(Mandatory)][string]$SpoolDir,
+        [Parameter(Mandatory)][string]$LogPath,
+        [scriptblock]$Sender = ${function:Send-TokenUsagePayload}
+    )
+    $counts = [ordered]@{ sent = 0; spooled = 0; rejected = 0; skipped = 0; failed = 0 }
+    try {
+        $config = Read-HookConfig -ConfigPath $ConfigPath -LogPath $LogPath
+        if (-not $config) { $counts.failed = 1; return [pscustomobject]$counts }
+        if (-not (Test-Path -LiteralPath $ProjectsDir -PathType Container)) { return [pscustomobject]$counts }
+
+        $reachable = Send-SpooledPayloads -Config $config -SpoolDir $SpoolDir -LogPath $LogPath -Sender $Sender
+        $transcripts = @(Get-ChildItem -LiteralPath $ProjectsDir -Directory |
+            ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Filter '*.jsonl' -File } | Sort-Object LastWriteTimeUtc)
+        foreach ($transcript in $transcripts) {
+            try {
+                $cwd = Get-TranscriptCwd -TranscriptPath $transcript.FullName
+                if (-not $cwd) { $counts.skipped++; continue }
+                $paths = @(Get-SessionTranscriptPaths -TranscriptPath $transcript.FullName)
+                $report = ConvertTo-TokenUsageReport -TranscriptPaths $paths -Cwd $cwd `
+                    -SessionId $transcript.BaseName -UserId ([string]$config.userId).Trim()
+                if (@($report.rows).Count -eq 0) { $counts.skipped++; continue }
+
+                $submitted = Submit-TokenUsageReport -Config $config -Report $report -SpoolDir $SpoolDir -LogPath $LogPath `
+                    -Sender $Sender -Reachable $reachable
+                $counts[$submitted.Outcome]++
+                if (-not $submitted.Reachable) { $reachable = $false }
+            } catch {
+                $counts.failed++
+                Write-HookLog $LogPath "Backfill of $($transcript.FullName) failed: $($_.Exception.Message)"
+            }
+        }
+        Write-HookLog $LogPath ("Backfill: {0} sent, {1} spooled, {2} rejected, {3} skipped, {4} failed." -f
+            $counts.sent, $counts.spooled, $counts.rejected, $counts.skipped, $counts.failed)
+    } catch {
+        $counts.failed++
+        Write-HookLog $LogPath "Token usage backfill failed: $($_.Exception.Message)"
+    }
+    [pscustomobject]$counts
 }
 
 # HTTP 400 means the payload itself is bad (e.g. inactive user): re-sending it can never succeed.
@@ -286,6 +398,14 @@ if ($MyInvocation.InvocationName -ne '.') {
         $ConfigPath = Resolve-HookPath $ConfigPath $env:TOKEN_USAGE_CONFIG (Join-Path $claudeDir 'token-usage.json')
         $SpoolDir = Resolve-HookPath $SpoolDir $env:TOKEN_USAGE_SPOOL_DIR (Join-Path $claudeDir 'token-usage-spool')
         $LogPath = Resolve-HookPath $LogPath $env:TOKEN_USAGE_LOG (Join-Path $claudeDir 'token-usage.log')
+
+        if ($Backfill) {
+            $ProjectsDir = Resolve-HookPath $ProjectsDir $null (Join-Path $claudeDir 'projects')
+            $counts = Invoke-TokenUsageBackfill -ProjectsDir $ProjectsDir -ConfigPath $ConfigPath -SpoolDir $SpoolDir -LogPath $LogPath
+            Write-Host ("Backfill: {0} sent, {1} spooled, {2} rejected, {3} skipped, {4} failed. Details: {5}" -f
+                $counts.sent, $counts.spooled, $counts.rejected, $counts.skipped, $counts.failed, $LogPath)
+            exit 0
+        }
 
         # Claude Code writes UTF-8; the console's default code page would garble non-ASCII paths.
         $reader = New-Object IO.StreamReader([Console]::OpenStandardInput(), (New-Object Text.UTF8Encoding($false)))

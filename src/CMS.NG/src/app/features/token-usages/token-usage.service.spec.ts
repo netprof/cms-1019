@@ -28,6 +28,16 @@ describe('TokenUsageService', () => {
     req.flush({ items: [], totalRecords: 0, totals: {} });
   });
 
+  it('sessionReport() POSTs the query to /tokenusages/report/sessions', () => {
+    const query = { sessionName: 'login', first: 0, rows: 20, sortField: 'lastDate', sortOrder: -1 };
+    service.sessionReport(query).subscribe((r) => expect(r.totalRecords).toBe(0));
+
+    const req = http.expectOne(`${environment.apiBaseUrl}/tokenusages/report/sessions`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(query);
+    req.flush({ items: [], totalRecords: 0, totals: {} });
+  });
+
   it('getUserLookups() GETs /lookups/appusers', () => {
     service.getUserLookups().subscribe((r) => expect(r.length).toBe(1));
 

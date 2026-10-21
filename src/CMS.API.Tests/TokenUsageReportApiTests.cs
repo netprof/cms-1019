@@ -35,7 +35,7 @@ public class TokenUsageReportApiTests : IClassFixture<ApiTestFactory>
     /// <summary>Stores one (session, date, model) row; every call is a new session unless one is given.</summary>
     private void Seed(string date, string userId = "helen", string project = "netprof/cms", string model = "claude-opus-5-5",
         long input = 1, long write5m = 0, long write1h = 0, long read = 0, long output = 0,
-        decimal? cost = null, string? sessionId = null) =>
+        decimal? cost = null, string? sessionId = null, string? sessionName = null) =>
         _repository.Seed(new TokenUsage
         {
             SessionId = sessionId ?? $"s-{Interlocked.Increment(ref _session)}",
@@ -43,6 +43,7 @@ public class TokenUsageReportApiTests : IClassFixture<ApiTestFactory>
             Model = model,
             UserId = userId,
             Project = project,
+            SessionName = sessionName,
             InputTokens = input,
             CacheWrite5mTokens = write5m,
             CacheWrite1hTokens = write1h,
@@ -291,6 +292,125 @@ public class TokenUsageReportApiTests : IClassFixture<ApiTestFactory>
     public async Task Report_DateFromAfterTo_Returns400()
     {
         var response = await PostAsync(new { from = "2026-10-20", to = "2026-10-19" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    // ---- by session ----
+
+    private const string SessionRoute = "/api/tokenusages/report/sessions";
+
+    private async Task<HttpResponseMessage> PostSessionsAsync(object query) =>
+        await _factory.CreateAuthenticatedClient().PostAsJsonAsync(SessionRoute, query);
+
+    private async Task<TokenUsageSessionReport> SessionReportAsync(object query)
+    {
+        var response = await PostSessionsAsync(query);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<TokenUsageSessionReport>(Json))!;
+    }
+
+    [Fact]
+    public async Task Sessions_SumOneSessionAcrossDatesAndModels_IntoOneRow()
+    {
+        Seed("2026-10-19", sessionId: "a", sessionName: "修正登入", model: "claude-opus-5-5", input: 1, read: 10, output: 100, cost: 1m);
+        Seed("2026-10-20", sessionId: "a", sessionName: "修正登入", model: "claude-opus-5-5", input: 2, read: 20, output: 200, cost: null);
+        Seed("2026-10-20", sessionId: "a", sessionName: "修正登入", model: "claude-haiku-5-5", input: 4, read: 40, output: 400, cost: 0.5m);
+        Seed("2026-10-20", sessionId: "b");
+
+        var response = await PostSessionsAsync(new { });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var row = json.RootElement.GetProperty("items").EnumerateArray().Single(r => r.GetProperty("sessionId").GetString() == "a");
+        Assert.Equal(("修正登入", "helen", "Helen Wu", "netprof/cms", "2026-10-19", "2026-10-20", "claude-haiku-5-5, claude-opus-5-5"),
+            (row.GetProperty("sessionName").GetString(), row.GetProperty("userId").GetString(),
+             row.GetProperty("userName").GetString(), row.GetProperty("project").GetString(),
+             row.GetProperty("firstDate").GetString(), row.GetProperty("lastDate").GetString(),
+             row.GetProperty("models").GetString()));
+        Assert.Equal((7L, 70L, 700L, 77L, 1.5m),
+            (row.GetProperty("inputTokens").GetInt64(), row.GetProperty("cacheReadTokens").GetInt64(),
+             row.GetProperty("outputTokens").GetInt64(), row.GetProperty("tokenIn").GetInt64(),
+             row.GetProperty("cost").GetDecimal()));
+        Assert.Equal(2, json.RootElement.GetProperty("totalRecords").GetInt32());
+    }
+
+    [Fact]
+    public async Task Sessions_UnnamedSession_HasNullName()
+    {
+        Seed("2026-10-20", sessionId: "a");
+
+        var report = await SessionReportAsync(new { });
+
+        Assert.Null(Assert.Single(report.Items).SessionName);
+    }
+
+    [Fact]
+    public async Task Sessions_FiltersApplyBeforeSumming()
+    {
+        Seed("2026-10-18", sessionId: "a", input: 1);
+        Seed("2026-10-19", sessionId: "a", input: 10);
+        Seed("2026-10-20", sessionId: "a", model: "claude-haiku-5-5", input: 100);
+
+        var report = await SessionReportAsync(new { from = "2026-10-19", model = "opus" });
+
+        var row = Assert.Single(report.Items);
+        Assert.Equal((10L, new DateOnly(2026, 10, 19), new DateOnly(2026, 10, 19), "claude-opus-5-5"),
+            (row.InputTokens, row.FirstDate, row.LastDate, row.Models));
+        Assert.Equal(10L, report.Totals.InputTokens);
+    }
+
+    [Fact]
+    public async Task Sessions_SessionNameFilter_MatchesContains_AndSkipsUnnamed()
+    {
+        Seed("2026-10-20", sessionId: "a", sessionName: "Fix LOGIN bug");
+        Seed("2026-10-20", sessionId: "b", sessionName: "Add report");
+        Seed("2026-10-20", sessionId: "c");
+
+        var report = await SessionReportAsync(new { sessionName = "login" });
+
+        Assert.Equal("a", Assert.Single(report.Items).SessionId);
+    }
+
+    [Fact]
+    public async Task Sessions_DefaultToNewestLastDateFirst_TwentyRows()
+    {
+        for (var day = 1; day <= 25; day++) Seed($"2026-10-{day:00}", sessionId: $"s{day:00}");
+
+        var report = await SessionReportAsync(new { });
+
+        Assert.Equal(25, report.TotalRecords);
+        Assert.Equal(20, report.Items.Count);
+        Assert.Equal(("s25", "s06"), (report.Items[0].SessionId, report.Items[^1].SessionId));
+    }
+
+    [Fact]
+    public async Task Sessions_SortBySessionName_BreaksTiesByLastDateThenSessionId()
+    {
+        Seed("2026-10-19", sessionId: "c", sessionName: "b");
+        Seed("2026-10-20", sessionId: "b", sessionName: "a");
+        Seed("2026-10-20", sessionId: "a", sessionName: "a");
+        Seed("2026-10-19", sessionId: "d", sessionName: "a");
+
+        var report = await SessionReportAsync(new { sortField = "sessionName", sortOrder = 1 });
+
+        Assert.Equal(["a", "b", "d", "c"], report.Items.Select(r => r.SessionId));
+    }
+
+    [Theory]
+    [InlineData("usageDate")] // a column of the other report
+    [InlineData("model")]
+    public async Task Sessions_UnknownSortField_Returns400(string sortField)
+    {
+        var response = await PostSessionsAsync(new { sortField });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Sessions_DateFromAfterTo_Returns400()
+    {
+        var response = await PostSessionsAsync(new { from = "2026-10-20", to = "2026-10-19" });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
