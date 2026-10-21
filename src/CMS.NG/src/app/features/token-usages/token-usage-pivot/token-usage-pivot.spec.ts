@@ -6,21 +6,21 @@ import { TokenUsagePivot as Pivot, TokenUsageReportFilters, TokenUsageTotals } f
 import { TokenUsageService } from '../token-usage.service';
 import { TokenUsagePivot } from './token-usage-pivot';
 
-function t(cost: number | null, tokenIn: number): TokenUsageTotals {
+function totals(cost: number | null, tokenIn: number): TokenUsageTotals {
   return { inputTokens: tokenIn, cacheWrite5mTokens: 0, cacheWrite1hTokens: 0, cacheReadTokens: 0, outputTokens: 7, tokenIn, cost };
 }
 
 /** Helen spends more tokens, Jenny more money. */
 const pivot: Pivot = {
   columns: [
-    { key: '2026-09', label: '2026-09', title: null, total: t(1, 1000) },
-    { key: '2026-10', label: '2026-10', title: null, total: t(5, 50) },
+    { key: '2026-09', label: '2026-09', title: null, total: totals(1, 1000) },
+    { key: '2026-10', label: '2026-10', title: null, total: totals(5, 50) },
   ],
   rows: [
-    { key: 'helen', label: 'Helen Wu', title: 'helen', cells: { '2026-09': t(1, 1000), '2026-10': t(1, 10) }, total: t(2, 1010) },
-    { key: 'jenny', label: 'Jenny Lin', title: 'jenny', cells: { '2026-10': t(4, 40) }, total: t(4, 40) },
+    { key: 'helen', label: 'Helen Wu', title: 'helen', cells: { '2026-09': totals(1, 1000), '2026-10': totals(1, 10) }, total: totals(2, 1010) },
+    { key: 'jenny', label: 'Jenny Lin', title: 'jenny', cells: { '2026-10': totals(4, 40) }, total: totals(4, 40) },
   ],
-  total: t(6, 1050),
+  total: totals(6, 1050),
 };
 
 const filters: TokenUsageReportFilters = { from: '2026-09-01', to: '2026-10-20', userId: null, project: null, model: null };
@@ -156,8 +156,8 @@ describe('TokenUsagePivot', () => {
     sessionStorage.setItem('tokenusage-pivot-config', JSON.stringify({ rowDim: 'project', colDim: null }));
     await setup(of({
       columns: [],
-      rows: [{ key: 'netprof/cms', label: 'netprof/cms', title: null, cells: {}, total: t(3, 30) }],
-      total: t(3, 30),
+      rows: [{ key: 'netprof/cms', label: 'netprof/cms', title: null, cells: {}, total: totals(3, 30) }],
+      total: totals(3, 30),
     }));
 
     expect(service.pivot).toHaveBeenCalledWith(jasmine.objectContaining({ rowDim: 'project', colDim: null }));
@@ -170,10 +170,10 @@ describe('TokenUsagePivot', () => {
     await setup(of({
       columns: [],
       rows: [
-        { key: '2026-W42', label: '2026-W42', title: '2026-10-12 ~ 2026-10-18', cells: {}, total: t(1, 10) },
-        { key: '2026-W43', label: '2026-W43', title: '2026-10-19 ~ 2026-10-25', cells: {}, total: t(9, 90) },
+        { key: '2026-W42', label: '2026-W42', title: '2026-10-12 ~ 2026-10-18', cells: {}, total: totals(1, 10) },
+        { key: '2026-W43', label: '2026-W43', title: '2026-10-19 ~ 2026-10-25', cells: {}, total: totals(9, 90) },
       ],
-      total: t(10, 100),
+      total: totals(10, 100),
     }));
 
     expect(rowLabels()).toEqual(['2026-W42', '2026-W43']);
@@ -185,12 +185,32 @@ describe('TokenUsagePivot', () => {
     await setup(of({
       ...pivot,
       columns: [
-        { key: 'claude-haiku-5', label: 'claude-haiku-5', title: null, total: t(1, 10) },
-        { key: 'claude-opus-5-5', label: 'claude-opus-5-5', title: null, total: t(5, 50) },
+        { key: 'claude-haiku-5', label: 'claude-haiku-5', title: null, total: totals(1, 10) },
+        { key: 'claude-opus-5-5', label: 'claude-opus-5-5', title: null, total: totals(5, 50) },
       ],
     }));
 
     expect(headers()).toEqual(['使用者', 'claude-opus-5-5', 'claude-haiku-5', '合計']);
+  });
+
+  it('sorts missing cells and unpriced cost last in both directions', async () => {
+    await setup(of<Pivot>({
+      ...pivot,
+      rows: [
+        { key: 'amy', label: 'Amy', title: 'amy', cells: {}, total: totals(1, 10) },
+        { key: 'bob', label: 'Bob', title: 'bob', cells: { '2026-10': totals(null, 20) }, total: totals(null, 20) },
+        { key: 'cat', label: 'Cat', title: 'cat', cells: { '2026-10': totals(1, 10) }, total: totals(1, 10) },
+        { key: 'dan', label: 'Dan', title: 'dan', cells: { '2026-10': totals(3, 30) }, total: totals(3, 30) },
+      ],
+    }));
+
+    component.sortBy('2026-10');
+    await render();
+    expect(rowLabels().slice(0, 2)).toEqual(['Dan', 'Cat']);
+
+    component.sortBy('2026-10');
+    await render();
+    expect(rowLabels().slice(0, 2)).toEqual(['Cat', 'Dan']);
   });
 
   it('shows an error toast when the pivot fails to load', async () => {

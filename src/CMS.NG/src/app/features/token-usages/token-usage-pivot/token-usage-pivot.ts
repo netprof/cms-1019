@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { Component, WritableSignal, computed, effect, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -16,6 +16,7 @@ import {
   TokenUsageTotals,
 } from '../token-usage.model';
 import { TokenUsageService } from '../token-usage.service';
+import { loadSession, saveSession } from '../../../core/utils/session-storage.util';
 
 /** A token sum or the cost: what each pivot cell shows. */
 export type PivotMeasure = keyof TokenUsageTotals;
@@ -50,16 +51,13 @@ const DIMENSIONS: { label: string; value: PivotDimension }[] = [
 ];
 
 function loadConfig(): PivotConfig {
-  try {
-    return { ...DEFAULT_CONFIG, ...JSON.parse(sessionStorage.getItem(CONFIG_KEY) ?? '{}') };
-  } catch {
-    return DEFAULT_CONFIG;
-  }
+  return { ...DEFAULT_CONFIG, ...loadSession<Partial<PivotConfig>>(CONFIG_KEY, {}) };
 }
 
-/** Missing cells and unpriced cost sort below every value. */
-function compareValues(a: number | null | undefined, b: number | null | undefined): number {
-  return (a ?? -Infinity) - (b ?? -Infinity) || 0;
+/** Ascending (1) or descending (-1); missing cells and unpriced cost sort last either way. */
+function compareValues(a: number | null | undefined, b: number | null | undefined, order: number): number {
+  if (a == null || b == null) return Number(a == null) - Number(b == null);
+  return order * (a - b);
 }
 
 /**
@@ -163,7 +161,7 @@ export class TokenUsagePivot {
     const columns = this.pivot()?.columns ?? [];
     if (this.colDim() === 'date') return columns;
     const m = this.measure();
-    return [...columns].sort((a, b) => compareValues(b.total[m], a.total[m]));
+    return [...columns].sort((a, b) => compareValues(a.total[m], b.total[m], -1));
   });
 
   /** The chosen sort, else dates in time order (ISO labels sort as text), else by total, largest first. */
@@ -176,7 +174,7 @@ export class TokenUsagePivot {
     const m = this.measure();
     const value = (r: TokenUsagePivotRow) => (field === TOTAL ? r.total : r.cells[field])?.[m];
     return [...(this.pivot()?.rows ?? [])].sort((a, b) =>
-      order * (field === LABEL ? a.label.localeCompare(b.label) : compareValues(value(a), value(b))),
+      field === LABEL ? order * a.label.localeCompare(b.label) : compareValues(value(a), value(b), order),
     );
   });
 
@@ -205,26 +203,25 @@ export class TokenUsagePivot {
         measure: this.measure(),
         sort: this.sort(),
       };
-      try {
-        sessionStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-      } catch {
-        // storage unavailable; the config simply isn't remembered
-      }
+      saveSession(CONFIG_KEY, config);
     });
   }
 
   setRowDim(dim: PivotDimension) {
-    this.rowDim.set(dim);
-    this.sort.set(null); // column keys and labels of the old axes no longer apply
+    this.setAxis(this.rowDim, dim);
   }
 
   setColDim(dim: PivotDimension | null) {
-    this.colDim.set(dim);
-    this.sort.set(null);
+    this.setAxis(this.colDim, dim);
   }
 
   setDateGrain(grain: DateGrain) {
-    this.dateGrain.set(grain);
+    this.setAxis(this.dateGrain, grain);
+  }
+
+  /** Changes an axis setting; the sort resets, as the old axes' column keys and labels no longer apply. */
+  private setAxis<T>(setting: WritableSignal<T>, value: T) {
+    setting.set(value);
     this.sort.set(null);
   }
 

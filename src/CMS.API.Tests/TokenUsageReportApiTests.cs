@@ -517,6 +517,19 @@ public class TokenUsageReportApiTests : IClassFixture<ApiTestFactory>
     }
 
     [Fact]
+    public async Task Pivot_KeysDifferingOnlyInCase_CellsUseTheColumnKey()
+    {
+        Seed("2026-10-19", userId: "jenny", project: "netprof/CMS", input: 1);
+        Seed("2026-10-20", userId: "helen", project: "netprof/cms", input: 2);
+
+        var pivot = await PivotAsync(new { rowDim = "user", colDim = "project" });
+
+        var column = Assert.Single(pivot.Columns);
+        Assert.All(pivot.Rows, r => Assert.Equal(column.Key, Assert.Single(r.Cells).Key));
+        Assert.Equal(3L, column.Total.InputTokens);
+    }
+
+    [Fact]
     public async Task Pivot_AppliesTheReportFilters()
     {
         Seed("2026-10-19", input: 1);

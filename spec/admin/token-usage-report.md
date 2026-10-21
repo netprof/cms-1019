@@ -171,7 +171,7 @@ GitHub issue: [#10](https://github.com/netprof/cms-1019/issues/10)
   - Default: user × month, cost.
   - Measure and sort stay on the client; dimensions, grain and filters re-query.
   - Rows by total desc (by date asc when the rows are dates); columns by date asc, otherwise by total desc. A header click sorts the rows by that column.
-  - No paging and no column cap: the row header is frozen and the table scrolls sideways.
+  - No paging and no column cap: the row header and the 合計 column are frozen while the table scrolls sideways.
   - Empty cells and NULL cost are blank; numbers formatted like the other modes.
   - State: `tokenusage-pivot-filters` and `tokenusage-pivot-config`; the date range follows the report's saving rule.
 - **Access** unchanged. **Out of scope:** session dimension, export, heat-map shading, more than one dimension per axis.

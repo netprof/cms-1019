@@ -79,8 +79,7 @@ public class TokenUsagesController(
     [HttpPost("report/pivot")]
     public async Task<ActionResult<TokenUsagePivot>> Pivot(TokenUsagePivotQuery query)
     {
-        if (query.From > query.To)
-            ModelState.AddModelError(nameof(query.To), "To must not be earlier than From.");
+        ValidateDateRange(query);
         if (!PivotDimensions.Contains(query.RowDim ?? ""))
             ModelState.AddModelError(nameof(query.RowDim), $"Cannot pivot by '{query.RowDim}'.");
         if (query.ColDim is not null && !PivotDimensions.Contains(query.ColDim))
@@ -96,6 +95,17 @@ public class TokenUsagesController(
         var rowHeader = PivotHeader(query.RowDim!, query.DateGrain);
         var colHeader = query.ColDim is null ? null : PivotHeader(query.ColDim, query.DateGrain);
 
+        var columns = colHeader is null
+            ? []
+            : rows
+                .GroupBy(r => colHeader(r).Key, SqlCollation.Comparer)
+                .OrderBy(g => g.Key, SqlCollation.Comparer)
+                .Select(g => WithHeader(new TokenUsagePivotColumn { Total = Sum(g) }, colHeader(g.First())))
+                .ToList();
+        // Keys differing only in case group together, so key every row's cells by its column's own key:
+        // the client looks cells up by column key, case-sensitively.
+        var columnKeys = columns.ToDictionary(c => c.Key, c => c.Key, SqlCollation.Comparer);
+
         return Ok(new TokenUsagePivot
         {
             Rows = rows
@@ -106,17 +116,11 @@ public class TokenUsagesController(
                     Total = Sum(g),
                     Cells = colHeader is null
                         ? []
-                        : g.GroupBy(r => colHeader(r).Key, SqlCollation.Comparer)
-                            .ToDictionary(c => c.Key, Sum, SqlCollation.Comparer),
+                        : g.GroupBy(r => columnKeys[colHeader(r).Key])
+                            .ToDictionary(c => c.Key, Sum),
                 }, rowHeader(g.First())))
                 .ToList(),
-            Columns = colHeader is null
-                ? []
-                : rows
-                    .GroupBy(r => colHeader(r).Key, SqlCollation.Comparer)
-                    .OrderBy(g => g.Key, SqlCollation.Comparer)
-                    .Select(g => WithHeader(new TokenUsagePivotColumn { Total = Sum(g) }, colHeader(g.First())))
-                    .ToList(),
+            Columns = columns,
             Total = Sum(rows),
         });
     }
@@ -175,11 +179,16 @@ public class TokenUsagesController(
     private bool ValidateReportQuery<TRow>(
         TokenUsageReportQuery query, Dictionary<string, ReportSort<TRow>> sorts, out ReportSort<TRow> sort)
     {
-        if (query.From > query.To)
-            ModelState.AddModelError(nameof(query.To), "To must not be earlier than From.");
+        ValidateDateRange(query);
         if (!sorts.TryGetValue(query.SortField, out sort!))
             ModelState.AddModelError(nameof(query.SortField), $"Cannot sort by '{query.SortField}'.");
         return ModelState.IsValid;
+    }
+
+    private void ValidateDateRange(TokenUsageReportFilter filter)
+    {
+        if (filter.From > filter.To)
+            ModelState.AddModelError(nameof(filter.To), "To must not be earlier than From.");
     }
 
     private static TReport BuildReport<TReport, TRow>(
