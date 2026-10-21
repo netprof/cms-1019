@@ -21,11 +21,29 @@ export interface TokenUsageReportRow extends TokenUsageTotals {
   model: string;
 }
 
-export interface TokenUsageReport {
-  items: TokenUsageReportRow[];
+/** One session's filtered usage, summed over its dates and models. */
+export interface TokenUsageSessionRow extends TokenUsageTotals {
+  sessionId: string;
+  /** /rename title, else Claude's own; null when the session has none. */
+  sessionName: string | null;
+  userId: string;
+  userName: string;
+  project: string;
+  /** `yyyy-MM-dd`, earliest Taipei date in the filtered rows. */
+  firstDate: string;
+  /** `yyyy-MM-dd`, latest Taipei date in the filtered rows. */
+  lastDate: string;
+  /** Distinct models, sorted, joined with ", ". */
+  models: string;
+}
+
+export interface TokenUsageReport<TRow = TokenUsageReportRow> {
+  items: TRow[];
   totalRecords: number;
   totals: TokenUsageTotals;
 }
+
+export type TokenUsageSessionReport = TokenUsageReport<TokenUsageSessionRow>;
 
 export interface TokenUsageReportFilters {
   /** `yyyy-MM-dd`, inclusive. */
@@ -37,6 +55,8 @@ export interface TokenUsageReportFilters {
   project?: string | null;
   /** Contains. */
   model?: string | null;
+  /** Contains; only the session report uses it. */
+  sessionName?: string | null;
 }
 
 export interface TokenUsageReportQuery extends TokenUsageReportFilters {

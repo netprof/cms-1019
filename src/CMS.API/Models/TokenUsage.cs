@@ -8,6 +8,9 @@ public class TokenUsage
     public string Model { get; set; } = "";
     public string UserId { get; set; } = "";
     public string Project { get; set; } = "";
+
+    /// <summary>The session's title (/rename, else Claude's own); the same on every row of the session.</summary>
+    public string? SessionName { get; set; }
     public long InputTokens { get; set; }
     public long CacheWrite5mTokens { get; set; }
     public long CacheWrite1hTokens { get; set; }

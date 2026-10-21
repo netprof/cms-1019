@@ -109,9 +109,42 @@ Every Claude Code session reports its own token consumption to the CMS API autom
 - Login or identity in the CMS UI; the hook's user ID is self-declared in config.
 - macOS and Linux hook support.
 - Deploying the API beyond `http://localhost:5000`.
-- Backfilling usage from sessions that ended before the hook was installed.
+- ~~Backfilling usage from sessions that ended before the hook was installed.~~ Added by the session name extension below (`-Backfill`), for sessions whose transcripts are still on disk.
 - Currencies other than USD.
 - Prompt-size price tiers. Claude Haiku 5.5 costs more for prompts over 100,000 tokens ($0.50 / $0.625 / $1 / $0.05 / $2.50 per MTok, against $0.10 / $0.125 / $0.20 / $0.01 / $0.50 up to 100K), but `ModelPrice` holds one price set per model and date, and the hook sends usage summed per date and model, which loses the per-reply prompt size the tier depends on. Haiku 5.5 is priced at its ≤100K tier, which under-prices long-prompt replies.
+
+## Extension: session name and session view (2026-10-21)
+
+### User stories
+
+29. As an admin, I want each session's name stored with its usage, so that I can tell sessions apart without reading session IDs.
+30. As a developer, I want the name taken from my `/rename` title, or else from the title Claude generated, so that I never have to enter it twice.
+31. As an admin, I want a "by session" view of the report, with one row per session showing its name, ID, date range, user, project, models, tokens and cost, so that I can find expensive sessions.
+32. As an admin, I want to search sessions by name, so that I can find one session quickly.
+33. As a developer, I want to backfill the sessions still in my local transcripts, so that sessions from before the install, or from before names were sent, are reported too.
+
+### Decisions
+
+- **Storage.** `TokenUsage.SessionName nvarchar(200) NULL` holds the name, repeated on every row of the session. No separate session table: the session is replaced as a whole, so the copies cannot disagree. Existing databases get the column from an idempotent upgrade script.
+- **Source (hook).** The name is the last `custom-title` entry (`/rename`). Without one it is the last `ai-title` entry, and without either it is `null`. Only the main transcript counts; subagent titles are ignored. The hook cuts the name to 200 characters, so a long title never gets the whole session rejected.
+- **Ingest.** `sessionName` is optional, so older hooks keep working.
+  - Over 200 characters → 400.
+  - Trimmed; a blank name is stored as `NULL`.
+  - A post without a name keeps the stored name, read before the delete in the same transaction. A post with a new name replaces it.
+- **Session report.** `POST /api/tokenusages/report/sessions` returns one row per session.
+  - It uses the same filters as the summary report, plus a `sessionName` contains filter.
+  - Filters apply to the rows before summing.
+  - The date column shows first ~ last date. The models column lists the distinct models, sorted and comma-joined.
+  - Default sort: last date, newest first.
+  - Totals and server-side paging work as in the summary report.
+- **UI.** A summary / session toggle on the same page.
+  - Each mode remembers its own filters, sort and page.
+  - The session-name filter appears only in session mode.
+- **Backfill.** Running `TokenUsageHook.ps1 -Backfill` by hand posts every local main transcript with its subagents.
+  - It skips sessions with no usage, so nothing stored is ever cleared.
+  - It shares the hook's config, spool and log.
+  - After the first unreachable attempt it spools the rest without sending.
+- **Project for an old transcript.** If the cwd no longer exists (for example, a removed worktree), git is asked from the nearest existing parent folder.
 
 ## Further Notes
 

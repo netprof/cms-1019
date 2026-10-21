@@ -180,6 +180,84 @@ Describe 'ConvertTo-TokenUsageReport' {
         $report.rows[0].cacheWrite1hTokens | Should Be 0
     }
 
+    Context 'session name' {
+        function New-TitleLine([string]$Type, [string]$Title) {
+            $property = if ($Type -eq 'custom-title') { 'customTitle' } else { 'aiTitle' }
+            @{ type = $Type; $property = $Title; sessionId = 's' } | ConvertTo-Json -Compress
+        }
+
+        It 'is the last /rename title, even when Claude generated one later' {
+            # Chinese built from char codes: Windows PowerShell reads this BOM-less file in the ANSI code page.
+            $chinese = -join ([char[]](0x4FEE, 0x6B63, 0x767B, 0x5165)) + ' bug'
+            $t = New-Transcript "$TestDrive\titles.jsonl" @(
+                (New-TitleLine 'ai-title' 'Generated'),
+                (New-TitleLine 'custom-title' 'First name'),
+                (New-AssistantLine -Id 'msg_1' -Out 1),
+                (New-TitleLine 'custom-title' $chinese),
+                (New-TitleLine 'ai-title' 'Generated again')
+            )
+
+            $report = ConvertTo-TokenUsageReport -TranscriptPaths $t -Cwd $cwd -SessionId 's' -UserId 'u'
+
+            $report.sessionName | Should BeExactly $chinese
+        }
+
+        It 'falls back to the last title Claude generated' {
+            $t = New-Transcript "$TestDrive\ai-title.jsonl" @(
+                (New-TitleLine 'ai-title' 'Old'),
+                (New-TitleLine 'ai-title' 'CMS scaffold'),
+                (New-AssistantLine -Id 'msg_1' -Out 1)
+            )
+
+            $report = ConvertTo-TokenUsageReport -TranscriptPaths $t -Cwd $cwd -SessionId 's' -UserId 'u'
+
+            $report.sessionName | Should Be 'CMS scaffold'
+        }
+
+        It 'is null without a title, and posts as JSON null' {
+            $t = New-Transcript "$TestDrive\untitled.jsonl" @((New-AssistantLine -Id 'msg_1' -Out 1))
+
+            $report = ConvertTo-TokenUsageReport -TranscriptPaths $t -Cwd $cwd -SessionId 's' -UserId 'u'
+
+            $report.sessionName | Should BeNullOrEmpty
+            ($report | ConvertTo-Json -Compress) | Should Match '"sessionName":null'
+        }
+
+        It 'ignores titles in subagent transcripts' {
+            $main = New-Transcript "$TestDrive\titled\sess-t.jsonl" @((New-AssistantLine -Id 'msg_main' -Out 1))
+            New-Transcript "$TestDrive\titled\sess-t\subagents\agent-x.jsonl" @(
+                (New-TitleLine 'custom-title' 'Subagent title'),
+                (New-AssistantLine -Id 'msg_sub' -Out 2)
+            ) | Out-Null
+
+            $report = ConvertTo-TokenUsageReport -TranscriptPaths (Get-SessionTranscriptPaths $main) -Cwd $cwd -SessionId 's' -UserId 'u'
+
+            $report.sessionName | Should BeNullOrEmpty
+        }
+
+        It 'still counts an assistant line that merely quotes a title entry' {
+            # A tool call whose input object has its own "type":"custom-title".
+            $t = New-Transcript "$TestDrive\quoting.jsonl" @(
+                '{"type":"assistant","timestamp":"2026-10-20T03:00:00.000Z","message":{"id":"msg_q","model":"claude-opus-5-5","content":[{"type":"tool_use","input":{"type":"custom-title","customTitle":"not mine"}}],"usage":{"input_tokens":0,"cache_read_input_tokens":0,"output_tokens":9}}}'
+            )
+
+            $report = ConvertTo-TokenUsageReport -TranscriptPaths $t -Cwd $cwd -SessionId 's' -UserId 'u'
+
+            @($report.rows).Count | Should Be 1
+            $report.rows[0].outputTokens | Should Be 9
+            $report.sessionName | Should BeNullOrEmpty
+        }
+
+        It 'is cut to 200 characters without splitting a surrogate pair' {
+            $long = New-Transcript "$TestDrive\long.jsonl" @((New-TitleLine 'custom-title' ('n' * 250)), (New-AssistantLine -Id 'msg_1' -Out 1))
+            $emoji = [char]::ConvertFromUtf32(0x1F600)
+            $pair = New-Transcript "$TestDrive\pair.jsonl" @((New-TitleLine 'custom-title' (('n' * 199) + $emoji)), (New-AssistantLine -Id 'msg_1' -Out 1))
+
+            (ConvertTo-TokenUsageReport -TranscriptPaths $long -Cwd $cwd -SessionId 's' -UserId 'u').sessionName.Length | Should Be 200
+            (ConvertTo-TokenUsageReport -TranscriptPaths $pair -Cwd $cwd -SessionId 's' -UserId 'u').sessionName | Should Be ('n' * 199)
+        }
+    }
+
     Context 'project' {
         $t = New-Transcript "$TestDrive\project.jsonl" @((New-AssistantLine -Id 'msg_p' -Out 1))
 
@@ -211,6 +289,22 @@ Describe 'ConvertTo-TokenUsageReport' {
             $report = ConvertTo-TokenUsageReport -TranscriptPaths $t -Cwd $repo -SessionId 's' -UserId 'u'
 
             $report.project | Should Be 'acme/widgets'
+        }
+
+        It 'asks git from the nearest existing folder when the cwd is gone (a removed worktree)' {
+            $repo = New-PlainFolder 'gone-clone'
+            & git -C $repo init -q 2>$null
+            & git -C $repo remote add origin 'https://github.com/netprof/cms-1019.git'
+
+            $report = ConvertTo-TokenUsageReport -TranscriptPaths $t -Cwd "$repo\.claude\worktrees\deleted" -SessionId 's' -UserId 'u'
+
+            $report.project | Should Be 'netprof/cms-1019'
+        }
+
+        It 'is the folder name of a gone cwd outside any repository' {
+            $report = ConvertTo-TokenUsageReport -TranscriptPaths $t -Cwd "$TestDrive\never-existed\some-app" -SessionId 's' -UserId 'u'
+
+            $report.project | Should Be 'some-app'
         }
     }
 }
@@ -375,5 +469,82 @@ Describe 'Invoke-TokenUsageHook' {
             @(Get-ChildItem $s -Filter '*.json' -File).Count | Should Be 0
             Test-Path (Join-Path $s 'rejected') | Should Be $false
         }
+    }
+}
+
+Describe 'Invoke-TokenUsageBackfill' {
+    $config = Join-Path $TestDrive 'backfill-config.json'
+    [System.IO.File]::WriteAllText($config,
+        (@{ apiUrl = 'http://cms.test/api/tokenusages'; apiKey = 'k'; userId = 'alice' } | ConvertTo-Json), $script:utf8NoBom)
+    $cwd = New-PlainFolder 'backfill-app'
+    $cwdLine = @{ type = 'user'; cwd = $cwd; message = @{ role = 'user'; content = 'hi' } } | ConvertTo-Json -Compress
+
+    function New-Projects([string]$Name) {
+        $projects = Join-Path $TestDrive $Name
+        New-Transcript "$projects\C--a\sess-1.jsonl" @($cwdLine,
+            '{"type":"ai-title","aiTitle":"First session"}', (New-AssistantLine -Id 'msg_1' -Out 1)) | Out-Null
+        New-Transcript "$projects\C--a\sess-1\subagents\agent-x.jsonl" @((New-AssistantLine -Id 'msg_sub' -Out 20)) | Out-Null
+        New-Transcript "$projects\C--b\sess-2.jsonl" @($cwdLine, (New-AssistantLine -Id 'msg_2' -Out 300)) | Out-Null
+        New-Transcript "$projects\C--b\sess-empty.jsonl" @($cwdLine) | Out-Null
+        New-Transcript "$projects\C--b\sess-nocwd.jsonl" @((New-AssistantLine -Id 'msg_3' -Out 4000)) | Out-Null
+        $projects
+    }
+
+    function New-RecordingSender([bool]$Ok, [bool]$Reachable = $true, $Status = $null) {
+        $calls = New-Object System.Collections.ArrayList
+        $sender = { param($Url, $ApiKey, $Body)
+            [void]$calls.Add(($Body | ConvertFrom-Json))
+            [pscustomobject]@{ Ok = $Ok; Reachable = $Reachable; Status = $Status; Message = 'fake' }
+        }.GetNewClosure()
+        [pscustomobject]@{ Calls = $calls; Sender = $sender }
+    }
+
+    It 'posts every main transcript with usage, subagents included, and skips the rest' {
+        $up = New-RecordingSender $true
+
+        $counts = Invoke-TokenUsageBackfill -ProjectsDir (New-Projects 'bf-ok') -ConfigPath $config `
+            -SpoolDir "$TestDrive\bf-ok-spool" -LogPath "$TestDrive\bf-ok.log" -Sender $up.Sender
+
+        ($up.Calls | ForEach-Object { $_.sessionId } | Sort-Object) -join ',' | Should Be 'sess-1,sess-2'
+        $first = $up.Calls | Where-Object { $_.sessionId -eq 'sess-1' }
+        $first.sessionName | Should Be 'First session'
+        $first.project | Should Be 'backfill-app'
+        ($first.rows | Measure-Object outputTokens -Sum).Sum | Should Be 21
+        $counts.sent | Should Be 2
+        $counts.skipped | Should Be 2
+        (Get-Content "$TestDrive\bf-ok.log") -join "`n" | Should Match 'Backfill: 2 sent'
+    }
+
+    It 'tries the API once when it is down, spooling the rest without sending' {
+        $down = New-RecordingSender $false $false
+        $spool = "$TestDrive\bf-down-spool"
+
+        $counts = Invoke-TokenUsageBackfill -ProjectsDir (New-Projects 'bf-down') -ConfigPath $config `
+            -SpoolDir $spool -LogPath "$TestDrive\bf-down.log" -Sender $down.Sender
+
+        $down.Calls.Count | Should Be 1
+        $counts.spooled | Should Be 2
+        @(Get-ChildItem $spool -Filter '*.json' -File).Count | Should Be 2
+    }
+
+    It 'moves sessions the API rejects to rejected\' {
+        $bad = New-RecordingSender $false $true 400
+        $spool = "$TestDrive\bf-400-spool"
+
+        $counts = Invoke-TokenUsageBackfill -ProjectsDir (New-Projects 'bf-400') -ConfigPath $config `
+            -SpoolDir $spool -LogPath "$TestDrive\bf-400.log" -Sender $bad.Sender
+
+        $counts.rejected | Should Be 2
+        @(Get-ChildItem (Join-Path $spool 'rejected') -Filter '*.json' -File).Count | Should Be 2
+    }
+
+    It 'sends nothing and reports a failure when the config is unusable' {
+        $up = New-RecordingSender $true
+
+        $counts = Invoke-TokenUsageBackfill -ProjectsDir (New-Projects 'bf-noconfig') -ConfigPath "$TestDrive\nope.json" `
+            -SpoolDir "$TestDrive\bf-nc-spool" -LogPath "$TestDrive\bf-nc.log" -Sender $up.Sender
+
+        $up.Calls.Count | Should Be 0
+        $counts.failed | Should Be 1
     }
 }

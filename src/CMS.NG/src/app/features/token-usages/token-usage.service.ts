@@ -2,7 +2,12 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '@env/environment';
-import { AppUserLookup, TokenUsageReport, TokenUsageReportQuery } from './token-usage.model';
+import {
+  AppUserLookup,
+  TokenUsageReport,
+  TokenUsageReportQuery,
+  TokenUsageSessionReport,
+} from './token-usage.model';
 
 /** Read-only: the report. Ingest (POST /tokenusages) is called by the SessionEnd hook, never by the UI. */
 @Injectable({ providedIn: 'root' })
@@ -12,6 +17,10 @@ export class TokenUsageService {
 
   report(query: TokenUsageReportQuery): Observable<TokenUsageReport> {
     return this.http.post<TokenUsageReport>(`${this.url}/report`, query);
+  }
+
+  sessionReport(query: TokenUsageReportQuery): Observable<TokenUsageSessionReport> {
+    return this.http.post<TokenUsageSessionReport>(`${this.url}/report/sessions`, query);
   }
 
   getUserLookups(): Observable<AppUserLookup[]> {

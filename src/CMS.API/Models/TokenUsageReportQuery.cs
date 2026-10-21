@@ -19,6 +19,9 @@ public class TokenUsageReportFilter
 
     /// <summary>Model contains this text.</summary>
     public string? Model { get; set; }
+
+    /// <summary>SessionName contains this text (unnamed sessions never match).</summary>
+    public string? SessionName { get; set; }
 }
 
 /// <summary>Report request: filters plus the p-table paging/sorting state.</summary>
@@ -38,4 +41,10 @@ public class TokenUsageReportQuery : TokenUsageReportFilter
     /// <summary>1 = ascending, -1 = descending (PrimeNG convention).</summary>
     [AllowedValues(1, -1)]
     public int SortOrder { get; set; } = -1;
+}
+
+/// <summary>Session report request: the same filters and paging, newest session first by default.</summary>
+public class TokenUsageSessionReportQuery : TokenUsageReportQuery
+{
+    public TokenUsageSessionReportQuery() => SortField = "lastDate";
 }

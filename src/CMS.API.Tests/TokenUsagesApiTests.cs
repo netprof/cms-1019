@@ -51,9 +51,9 @@ public class TokenUsagesApiTests : IClassFixture<WebApplicationFactory<Program>>
 
     private static Dictionary<string, object?> Payload(
         string? sessionId = "s-1", string? userId = "helen", string? project = "netprof/cms",
-        Dictionary<string, object?>[]? rows = null) => new()
+        Dictionary<string, object?>[]? rows = null, string? sessionName = null) => new()
     {
-        ["sessionId"] = sessionId, ["userId"] = userId, ["project"] = project,
+        ["sessionId"] = sessionId, ["userId"] = userId, ["project"] = project, ["sessionName"] = sessionName,
         ["rows"] = rows ?? [Row()],
     };
 
@@ -144,6 +144,62 @@ public class TokenUsagesApiTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Empty(_repository.Rows);
     }
 
+    // ---- session name ----
+
+    [Fact]
+    public async Task Ingest_SessionName_IsStoredTrimmedOnEveryRow()
+    {
+        var response = await PostAsync(Payload(sessionName: " 修正登入 bug ",
+            rows: [Row("2026-10-19"), Row("2026-10-20")]));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.All(_repository.Rows, r => Assert.Equal("修正登入 bug", r.SessionName));
+    }
+
+    [Fact]
+    public async Task Ingest_WithoutSessionName_IsAccepted_AsUnnamed()
+    {
+        var payload = Payload();
+        payload.Remove("sessionName"); // an older hook does not send the field at all
+
+        var response = await PostAsync(payload);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Null(Assert.Single(_repository.Rows).SessionName);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("  ")]
+    public async Task Ingest_RepostWithoutSessionName_KeepsStoredName(string? sessionName)
+    {
+        await PostAsync(Payload(sessionName: "first title"));
+
+        var response = await PostAsync(Payload(sessionName: sessionName, rows: [Row("2026-10-19"), Row("2026-10-20")]));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(2, _repository.Rows.Count);
+        Assert.All(_repository.Rows, r => Assert.Equal("first title", r.SessionName));
+    }
+
+    [Fact]
+    public async Task Ingest_RepostWithNewSessionName_ReplacesIt()
+    {
+        await PostAsync(Payload(sessionName: "first title"));
+
+        await PostAsync(Payload(sessionName: "renamed"));
+
+        Assert.Equal("renamed", Assert.Single(_repository.Rows).SessionName);
+    }
+
+    [Fact]
+    public async Task Ingest_SessionNameOf200Characters_IsAccepted()
+    {
+        var response = await PostAsync(Payload(sessionName: new string('n', 200)));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
     // ---- validation ----
 
     public static TheoryData<string, Dictionary<string, object?>> InvalidFields => new()
@@ -156,6 +212,7 @@ public class TokenUsagesApiTests : IClassFixture<WebApplicationFactory<Program>>
         { "project", Payload(project: null) },
         { "project", Payload(project: " ") },
         { "project", Payload(project: new string('p', 201)) },
+        { "sessionName", Payload(sessionName: new string('n', 201)) },
         { "rows", new(Payload()) { ["rows"] = null } },
         { "model", Payload(rows: [Row(model: null)]) },
         { "model", Payload(rows: [Row(model: "")]) },
